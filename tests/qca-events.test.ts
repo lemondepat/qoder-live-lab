@@ -1,0 +1,21 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { parseFrame, publicProgress } from "../apps/runner/src/qca-provider";
+
+test("parses a QCA SSE frame and keeps its cursor", () => {
+  const frame = parseFrame('id: evt_123\nevent: agent.message\ndata: {"content":[{"type":"text","text":"Candidate ready"}]}');
+  assert.equal(frame?.id, "evt_123");
+  assert.equal(frame?.event, "agent.message");
+});
+
+test("never exposes thinking events", () => {
+  assert.equal(publicProgress("agent.thinking", { content: [{ type: "text", text: "private reasoning" }] }, "evt_1"), undefined);
+});
+
+test("maps tool use to a readable public milestone", () => {
+  assert.equal(publicProgress("agent.tool_use", { tool_name: "Edit" }, "evt_2")?.message, "Updating candidate files");
+});
+
+test("stops a turn only at session idle", () => {
+  assert.equal(publicProgress("session.status_idle", {}, "evt_3")?.idle, true);
+});
