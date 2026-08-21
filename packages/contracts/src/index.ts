@@ -43,6 +43,7 @@ export type ChangeRequest = {
   startedAt?: string;
   completedAt?: string;
   qcaSessionId?: string;
+  qcaPromptSentAt?: string;
   lastProviderEventId?: string;
   branch?: string;
   commitSha?: string;

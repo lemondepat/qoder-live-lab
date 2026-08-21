@@ -1,7 +1,7 @@
 import type { ChangeRequest, PolicyDecision } from "@qoder-live-lab/contracts";
 import { loadConfig } from "./config";
 import { ControlClient } from "./control-client";
-import { createPullRequest, findPreview, inspectAndVerify, mergePullRequest, waitForChecks } from "./git-pipeline";
+import { createPullRequest, createReleaseTag, findPreview, inspectAndVerify, mergePullRequest, waitForChecks } from "./git-pipeline";
 import { runLocal } from "./local-provider";
 import { runQca } from "./qca-provider";
 
@@ -35,7 +35,14 @@ async function processRequest(request: ChangeRequest, provider: "qca" | "local")
     if (provider === "qca") {
       if (config.dryRun) await simulateAgent(request.id);
       else {
-        const result = await runQca(request, branch, config, async (progress) => control.event(request.id, progress.kind, progress.message, { providerEventId: progress.providerEventId }));
+        const result = await runQca(
+          request,
+          branch,
+          config,
+          async (progress) => control.event(request.id, progress.kind, progress.message, { providerEventId: progress.providerEventId }),
+          async (sessionId) => control.event(request.id, "status", "Cloud session identity persisted", { qcaSessionId: sessionId }),
+          async () => control.event(request.id, "status", "Requirement delivered to Qoder Cloud", { qcaPromptSentAt: new Date().toISOString() }),
+        );
         await control.event(request.id, "status", "Cloud session completed", { qcaSessionId: result.sessionId });
       }
     } else {
@@ -56,8 +63,9 @@ async function processRequest(request: ChangeRequest, provider: "qca" | "local")
     await waitForChecks(candidate, config);
     const previewUrl = await findPreview(candidate, config, request.presetFeatureId);
     guardDeadline(deadline);
-    await control.finish(request.id, "live", { branch, commitSha: candidate.commitSha, files: candidate.files, policy: candidate.policy, testSummary: candidate.testSummary, previewUrl, pullRequestUrl: pullRequest?.html_url });
-    await mergePullRequest(pullRequest?.number, candidate, request.id, config);
+    const merge = await mergePullRequest(pullRequest?.number, candidate, request.id, config);
+    const released = await control.finish(request.id, "live", { branch, commitSha: candidate.commitSha, files: candidate.files, policy: candidate.policy, testSummary: candidate.testSummary, previewUrl, pullRequestUrl: pullRequest?.html_url });
+    await createReleaseTag(released.releaseVersion, merge?.sha, config).catch((error) => control.event(request.id, "release", `Release tag warning · ${error instanceof Error ? error.message : String(error)}`));
   } catch (error) {
     const policy = failurePolicy(error);
     await control.event(request.id, policy.layer === "agent" ? "agent" : "policy", `${policy.ruleId} · ${policy.publicReason}`).catch(() => undefined);
@@ -75,7 +83,10 @@ async function simulateAgent(requestId: string) {
 function guardDeadline(deadline: number) { if (Date.now() >= deadline) throw new Error("Task exceeded the five-minute release budget"); }
 function failurePolicy(error: unknown): PolicyDecision {
   const message = error instanceof Error ? error.message : String(error);
+  if (/Vercel|Preview|health check/i.test(message)) return { outcome: "reject", layer: "deployment", ruleId: "DEPLOYMENT-FAILED", publicReason: "The candidate Preview could not be verified, so the live version was not changed.", evidence: [safeEvidence(message)] };
+  if (/GitHub checks?|verification checks?|required check/i.test(message)) return { outcome: "reject", layer: "ci", ruleId: "CI-FAILED", publicReason: "Independent CI did not approve the candidate, so the live version was not changed.", evidence: [safeEvidence(message)] };
   const blocked = /policy|protected|not allowed|declined/i.test(message);
-  return { outcome: blocked ? "block" : "reject", layer: blocked ? "changeset" : "agent", ruleId: blocked ? "POLICY-STOP" : "AGENT-FAILED", publicReason: blocked ? "The candidate was stopped by an enforced boundary." : "The candidate could not be verified inside the release budget.", evidence: [message.replace(/(?:gh[pousr]_|sk-|Bearer\s+)[A-Za-z0-9_.-]+/gi, "[REDACTED]").slice(0, 140)] };
+  return { outcome: blocked ? "block" : "reject", layer: blocked ? "agent" : "agent", ruleId: blocked ? "AGENT-DECLINED" : "AGENT-FAILED", publicReason: blocked ? "Qoder declined an out-of-bound requirement before promotion." : "The candidate could not be verified inside the release budget.", evidence: [safeEvidence(message)] };
 }
+function safeEvidence(message: string) { return message.replace(/(?:gh[pousr]_|sk-|Bearer\s+)[A-Za-z0-9_.-]+/gi, "[REDACTED]").slice(0, 140); }
 function sleep(ms: number) { return new Promise((resolve) => setTimeout(resolve, ms)); }

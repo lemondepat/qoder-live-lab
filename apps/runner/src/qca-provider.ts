@@ -4,35 +4,80 @@ import { assertQcaConfig } from "./config";
 
 type PublicEvent = { id?: string; type?: string; content?: Array<{ type?: string; text?: string }>; tool_name?: string };
 
-export type AgentProgress = { providerEventId?: string; kind: "agent" | "status"; message: string; idle?: boolean };
+export type AgentProgress = { providerEventId?: string; kind: "agent" | "status"; message: string; idle?: boolean; declined?: boolean };
 
-export async function runQca(request: ChangeRequest, branch: string, config: RunnerConfig, onProgress: (event: AgentProgress) => Promise<void>) {
+export async function runQca(
+  request: ChangeRequest,
+  branch: string,
+  config: RunnerConfig,
+  onProgress: (event: AgentProgress) => Promise<void>,
+  onSession: (sessionId: string) => Promise<void>,
+  onPromptSent: () => Promise<void>,
+) {
   assertQcaConfig(config);
   const headers = { authorization: `Bearer ${config.qoderPat!}`, "content-type": "application/json" };
-  const sessionResponse = await fetch(`${config.qoderApiBase}/sessions`, {
-    method: "POST", headers,
-    body: JSON.stringify({
-      agent: config.qoderAgentId,
-      environment_id: config.qoderEnvironmentId,
-      title: `${request.id} · ${request.title}`,
-      metadata: { demo: "qoder-live-lab", request_id: request.id },
-      resources: [{ type: "github_repository", url: config.githubRepositoryUrl, authorization_token: config.githubToken, checkout: config.githubDefaultBranch, mount_path: "/data/workspace/qoder-live-lab" }],
-    }),
-  });
-  if (!sessionResponse.ok) throw new Error(`QCA session creation failed: ${sessionResponse.status} ${await sessionResponse.text()}`);
-  const session = await sessionResponse.json() as { id: string };
-  await onProgress({ kind: "status", message: `Cloud sandbox ready · ${session.id}` });
+  let sessionId = request.qcaSessionId;
+  if (!sessionId) {
+    const sessionResponse = await fetch(`${config.qoderApiBase}/sessions`, {
+      method: "POST", headers,
+      body: JSON.stringify({
+        agent: config.qoderAgentId,
+        environment_id: config.qoderEnvironmentId,
+        title: `${request.id} · ${request.title}`,
+        metadata: { demo: "qoder-live-lab", request_id: request.id },
+        resources: [{ type: "github_repository", url: config.githubRepositoryUrl, authorization_token: config.githubToken, checkout: config.githubDefaultBranch, mount_path: "/data/workspace/qoder-live-lab" }],
+      }),
+    });
+    if (!sessionResponse.ok) throw new Error(`QCA session creation failed: ${sessionResponse.status} ${await sessionResponse.text()}`);
+    sessionId = ((await sessionResponse.json()) as { id: string }).id;
+    await onSession(sessionId);
+    await onProgress({ kind: "status", message: `Cloud sandbox ready · ${sessionId}` });
+  } else {
+    await onProgress({ kind: "status", message: `Resuming Cloud session · ${sessionId}` });
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.taskTimeoutMs);
   try {
-    const streamResponse = await fetch(`${config.qoderApiBase}/sessions/${session.id}/events/stream`, { headers: { authorization: `Bearer ${config.qoderPat!}`, accept: "text/event-stream" }, signal: controller.signal });
-    if (!streamResponse.ok || !streamResponse.body) throw new Error(`QCA stream failed: ${streamResponse.status}`);
-    const prompt = buildPrompt(request, branch);
-    const sendResponse = await fetch(`${config.qoderApiBase}/sessions/${session.id}/events`, { method: "POST", headers, body: JSON.stringify({ events: [{ type: "user.message", content: [{ type: "text", text: prompt }] }] }) });
-    if (!sendResponse.ok) throw new Error(`QCA task submission failed: ${sendResponse.status} ${await sendResponse.text()}`);
-    await consumeSse(streamResponse.body, onProgress);
-    return { sessionId: session.id };
+    let cursor = request.lastProviderEventId;
+    let declined = false;
+    if (request.qcaSessionId) {
+      const replay = await replayHistory(sessionId, config, cursor, onProgress);
+      cursor = replay.cursor;
+      declined ||= replay.declined;
+      if (replay.idle && request.qcaPromptSentAt) {
+        if (declined) throw new Error("Agent DECLINED the out-of-scope requirement");
+        return { sessionId };
+      }
+    }
+
+    let streamResponse = await openStream(sessionId, config, controller.signal, cursor);
+    if (!request.qcaPromptSentAt) {
+      const prompt = buildPrompt(request, branch);
+      const sendResponse = await fetch(`${config.qoderApiBase}/sessions/${sessionId}/events`, { method: "POST", headers, body: JSON.stringify({ events: [{ type: "user.message", content: [{ type: "text", text: prompt }] }] }) });
+      if (!sendResponse.ok) throw new Error(`QCA task submission failed: ${sendResponse.status} ${await sendResponse.text()}`);
+      await onPromptSent();
+    }
+
+    while (!controller.signal.aborted) {
+      const consumed = await consumeSse(streamResponse.body!, onProgress, cursor);
+      cursor = consumed.cursor;
+      declined ||= consumed.declined;
+      if (consumed.idle) {
+        if (declined) throw new Error("Agent DECLINED the out-of-scope requirement");
+        return { sessionId };
+      }
+      const replay = await replayHistory(sessionId, config, cursor, onProgress);
+      cursor = replay.cursor;
+      declined ||= replay.declined;
+      if (replay.idle) {
+        if (declined) throw new Error("Agent DECLINED the out-of-scope requirement");
+        return { sessionId };
+      }
+      await onProgress({ kind: "status", message: "Reconnecting to the Cloud event stream" });
+      streamResponse = await openStream(sessionId, config, controller.signal, cursor);
+    }
+    throw new Error("QCA session exceeded the agent time budget");
   } finally {
     clearTimeout(timeout);
   }
@@ -48,13 +93,42 @@ export async function listHistoricalEvents(sessionId: string, config: RunnerConf
   return response.json() as Promise<{ data: PublicEvent[]; has_more: boolean; last_id?: string }>;
 }
 
-async function consumeSse(stream: ReadableStream<Uint8Array>, onProgress: (event: AgentProgress) => Promise<void>) {
+async function openStream(sessionId: string, config: RunnerConfig, signal: AbortSignal, cursor?: string) {
+  const headers: Record<string, string> = { authorization: `Bearer ${config.qoderPat!}`, accept: "text/event-stream" };
+  if (cursor) headers["last-event-id"] = cursor;
+  const response = await fetch(`${config.qoderApiBase}/sessions/${sessionId}/events/stream`, { headers, signal });
+  if (!response.ok || !response.body) throw new Error(`QCA stream failed: ${response.status}`);
+  return response;
+}
+
+async function replayHistory(sessionId: string, config: RunnerConfig, afterId: string | undefined, onProgress: (event: AgentProgress) => Promise<void>) {
+  let cursor = afterId;
+  let idle = false;
+  let declined = false;
+  do {
+    const page = await listHistoricalEvents(sessionId, config, cursor);
+    for (const event of page.data) {
+      cursor = event.id ?? cursor;
+      const progress = publicProgress(event.type, event, event.id);
+      if (progress) await onProgress(progress);
+      if (progress?.idle) idle = true;
+      if (progress?.declined) declined = true;
+    }
+    if (!page.has_more) break;
+    cursor = page.last_id ?? cursor;
+  } while (!idle);
+  return { cursor, idle, declined };
+}
+
+async function consumeSse(stream: ReadableStream<Uint8Array>, onProgress: (event: AgentProgress) => Promise<void>, initialCursor?: string) {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let cursor = initialCursor;
+  let declined = false;
   while (true) {
     const { value, done } = await reader.read();
-    if (done) break;
+    if (done) return { cursor, idle: false, declined };
     buffer += decoder.decode(value, { stream: true });
     let boundary;
     while ((boundary = buffer.indexOf("\n\n")) >= 0) {
@@ -62,9 +136,11 @@ async function consumeSse(stream: ReadableStream<Uint8Array>, onProgress: (event
       buffer = buffer.slice(boundary + 2);
       const parsed = parseFrame(frame);
       if (!parsed) continue;
+      cursor = parsed.id ?? cursor;
       const progress = publicProgress(parsed.event, parsed.data, parsed.id);
       if (progress) await onProgress(progress);
-      if (progress?.idle) { await reader.cancel(); return; }
+      if (progress?.declined) declined = true;
+      if (progress?.idle) { await reader.cancel(); return { cursor, idle: true, declined }; }
     }
   }
 }
@@ -85,7 +161,7 @@ export function publicProgress(event: string | undefined, data: PublicEvent, id?
   if (event.includes("tool_use")) return { providerEventId: id, kind: "agent", message: readableTool(data.tool_name), idle: false };
   if (event === "agent.message") {
     const text = data.content?.filter((block) => block.type === "text").map((block) => block.text).join(" ");
-    if (text) return { providerEventId: id, kind: "agent", message: text.slice(0, 200), idle: false };
+    if (text) return { providerEventId: id, kind: "agent", message: text.slice(0, 200), idle: false, declined: /\bDECLINED\b/i.test(text) };
   }
   return undefined;
 }

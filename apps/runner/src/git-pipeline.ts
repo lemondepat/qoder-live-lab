@@ -43,6 +43,7 @@ export async function createPullRequest(candidate: Candidate, requestId: string,
   if (response.status === 422) {
     const existing = await github(config, `/repos/${repo}/pulls?state=open&head=${repo.split("/")[0]}:${candidate.branch}`);
     const items = await existing.json() as Array<{ number: number; html_url: string }>;
+    if (!items[0]) throw new Error("GitHub rejected PR creation and no existing task PR was found");
     return items[0];
   }
   if (!response.ok) throw new Error(`GitHub PR creation failed: ${response.status} ${await response.text()}`);
@@ -67,14 +68,16 @@ export async function waitForChecks(candidate: Candidate, config: RunnerConfig) 
     await sleep(3000);
   }
   if (sawChecks) throw new Error("GitHub checks exceeded the release time budget");
+  throw new Error("No GitHub verification checks appeared for the candidate commit");
 }
 
 export async function findPreview(candidate: Candidate, config: RunnerConfig, presetFeatureId?: string) {
-  if (config.dryRun || !config.vercelToken || !config.vercelProjectId) {
+  if (config.dryRun) {
     const preview = new URL(config.showcaseUrl);
-    if (config.dryRun && presetFeatureId) preview.searchParams.set("edition", presetFeatureId);
+    if (presetFeatureId) preview.searchParams.set("edition", presetFeatureId);
     return preview.toString();
   }
+  if (!config.vercelToken || !config.vercelProjectId) throw new Error("Vercel Preview credentials are required in live mode");
   const deadline = Date.now() + 75_000;
   while (Date.now() < deadline) {
     const url = new URL("https://api.vercel.com/v6/deployments");
@@ -102,6 +105,16 @@ export async function mergePullRequest(prNumber: number | undefined, candidate: 
   const repo = parseRepository(config.githubRepositoryUrl);
   const response = await github(config, `/repos/${repo}/pulls/${prNumber}/merge`, { method: "PUT", body: JSON.stringify({ commit_title: `${requestId}: verified canvas change`, merge_method: "squash" }) });
   if (!response.ok) throw new Error(`GitHub merge failed: ${response.status} ${await response.text()}`);
+  const result = await response.json() as { merged: boolean; sha: string; message: string };
+  if (!result.merged) throw new Error(`GitHub did not merge the verified PR: ${result.message}`);
+  return result;
+}
+
+export async function createReleaseTag(version: string | undefined, sha: string | undefined, config: RunnerConfig) {
+  if (!version || !sha || config.dryRun || !config.githubToken || !config.githubRepositoryUrl) return;
+  const repo = parseRepository(config.githubRepositoryUrl);
+  const response = await github(config, `/repos/${repo}/git/refs`, { method: "POST", body: JSON.stringify({ ref: `refs/tags/${version}`, sha }) });
+  if (!response.ok && response.status !== 422) throw new Error(`GitHub release tag failed: ${response.status} ${await response.text()}`);
 }
 
 async function git(cwd: string, args: string[]) {

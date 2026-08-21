@@ -15,7 +15,7 @@ export class ControlClient {
   }
 
   async finish(requestId: string, status: "live" | "blocked" | "failed" | "cancelled", patch: { previewUrl?: string; commitSha?: string; branch?: string; pullRequestUrl?: string; testSummary?: string; files?: string[]; policy?: PolicyDecision } = {}) {
-    await this.post("/api/runner/finish", { requestId, status, ...patch });
+    return this.post("/api/runner/finish", { requestId, status, ...patch }) as Promise<ChangeRequest>;
   }
 
   private async post(path: string, body: unknown) {

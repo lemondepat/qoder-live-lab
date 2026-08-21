@@ -19,3 +19,9 @@ test("maps tool use to a readable public milestone", () => {
 test("stops a turn only at session idle", () => {
   assert.equal(publicProgress("session.status_idle", {}, "evt_3")?.idle, true);
 });
+
+test("recognizes an agent boundary refusal without exposing reasoning", () => {
+  const progress = publicProgress("agent.message", { content: [{ type: "text", text: "DECLINED: the request targets a protected path." }] }, "evt_4");
+  assert.equal(progress?.declined, true);
+  assert.match(progress?.message ?? "", /DECLINED/);
+});
