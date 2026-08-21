@@ -19,6 +19,7 @@ export function loadConfig() {
     githubDefaultBranch: process.env.GITHUB_DEFAULT_BRANCH || "main",
     vercelToken: process.env.VERCEL_TOKEN,
     vercelProjectId: process.env.VERCEL_SHOWCASE_PROJECT_ID,
+    showcaseUrl: process.env.SHOWCASE_BASE_URL || process.env.NEXT_PUBLIC_SHOWCASE_URL || `${process.env.CONTROL_BASE_URL || "http://localhost:3000"}/showcase`,
     taskTimeoutMs: Number(process.env.AGENT_TIMEOUT_MS || 180_000),
     totalTimeoutMs: Number(process.env.TASK_TIMEOUT_MS || 300_000),
     pollMs: Number(process.env.RUNNER_POLL_MS || 2_000),

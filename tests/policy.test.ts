@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { evaluateChanges, evaluateInput, redactEvidence } from "@qoder-live-lab/contracts/policy";
 
-test("allows a bounded creative canvas request", () => {
-  assert.equal(evaluateInput("Add a colorful comet trail that follows the cursor").outcome, "allow");
+test("allows a bounded market-canvas request", () => {
+  assert.equal(evaluateInput("Add a sector heatmap beside the existing market watchlist").outcome, "allow");
 });
 
 test("rejects protected control-plane and test bypass requests", () => {
@@ -26,6 +26,14 @@ test("blocks weakened tests, network calls, and secret access", () => {
   assert.equal(evaluateChanges(["apps/showcase/src/a.ts"], "+ test.skip('x')").ruleId, "TESTS-001");
   assert.equal(evaluateChanges(["apps/showcase/src/a.ts"], "+ fetch('https://example.com')").ruleId, "NETWORK-001");
   assert.equal(evaluateChanges(["apps/showcase/src/a.ts"], "+ process.env.API_KEY").ruleId, "SECRETS-001");
+});
+
+test("protects market facts and prohibits trading actions", () => {
+  assert.equal(evaluateInput("Change the displayed stock price so it looks profitable").ruleId, "DATA-001");
+  assert.equal(evaluateInput("Add a Buy button and place a real stock order").ruleId, "FINANCE-001");
+  assert.equal(evaluateChanges(["apps/showcase/src/market-data.ts"], "+ price: 999").ruleId, "SCOPE-001");
+  assert.equal(evaluateChanges(["apps/showcase/src/Trade.tsx"], "+ const buyButton = () => placeRealOrder() ").ruleId, "FINANCE-001");
+  assert.equal(evaluateChanges(["apps/showcase/src/Showcase.tsx"], "- DISPLAY ONLY · NOT INVESTMENT ADVICE").ruleId, "FINANCE-001");
 });
 
 test("redacts tokens and local usernames from public evidence", () => {

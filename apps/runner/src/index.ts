@@ -54,7 +54,7 @@ async function processRequest(request: ChangeRequest, provider: "qca" | "local")
     await control.event(request.id, "status", "Creating isolated preview", { status: "deploying" });
     const pullRequest = await createPullRequest(candidate, request.id, request.title, config);
     await waitForChecks(candidate, config);
-    const previewUrl = await findPreview(candidate, config);
+    const previewUrl = await findPreview(candidate, config, request.presetFeatureId);
     guardDeadline(deadline);
     await control.finish(request.id, "live", { branch, commitSha: candidate.commitSha, files: candidate.files, policy: candidate.policy, testSummary: candidate.testSummary, previewUrl, pullRequestUrl: pullRequest?.html_url });
     await mergePullRequest(pullRequest?.number, candidate, request.id, config);
@@ -66,7 +66,7 @@ async function processRequest(request: ChangeRequest, provider: "qca" | "local")
 }
 
 async function simulateAgent(requestId: string) {
-  for (const message of ["Cloud sandbox ready", "Inspecting the creative canvas", "Updating candidate files", "Running the showcase build"]) {
+  for (const message of ["Cloud sandbox ready", "Inspecting the market canvas", "Updating candidate files", "Running the showcase build"]) {
     await control.event(requestId, "agent", message);
     await sleep(650);
   }

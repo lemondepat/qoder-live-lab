@@ -69,8 +69,12 @@ export async function waitForChecks(candidate: Candidate, config: RunnerConfig) 
   if (sawChecks) throw new Error("GitHub checks exceeded the release time budget");
 }
 
-export async function findPreview(candidate: Candidate, config: RunnerConfig) {
-  if (config.dryRun || !config.vercelToken || !config.vercelProjectId) return `${config.controlUrl}/showcase`;
+export async function findPreview(candidate: Candidate, config: RunnerConfig, presetFeatureId?: string) {
+  if (config.dryRun || !config.vercelToken || !config.vercelProjectId) {
+    const preview = new URL(config.showcaseUrl);
+    if (config.dryRun && presetFeatureId) preview.searchParams.set("edition", presetFeatureId);
+    return preview.toString();
+  }
   const deadline = Date.now() + 75_000;
   while (Date.now() < deadline) {
     const url = new URL("https://api.vercel.com/v6/deployments");

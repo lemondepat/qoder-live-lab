@@ -18,7 +18,7 @@ const now = () => new Date().toISOString();
 const defaultRelease = {
   version: "v0.4",
   requestId: "QLL-016",
-  requirement: "Add a pulse to the center orb",
+  requirement: "Create the first Hong Kong market monitor",
   previewUrl: process.env.NEXT_PUBLIC_SHOWCASE_URL || "/showcase",
   activatedAt: new Date(Date.now() - 1000 * 60 * 11).toISOString(),
   healthy: true,
@@ -33,9 +33,9 @@ const defaultSystem: SystemState = {
 };
 
 const seededRequests: StoredRequest[] = [
-  makeSeed("QLL-018", "Add a comet trail that follows the cursor", "Mia", "coding", 2),
-  makeSeed("QLL-017", "Make every click launch a tiny constellation", "Noah", "testing", 5),
-  { ...makeSeed("QLL-016", "Add a pulse to the center orb", "Lena", "live", 11), releaseVersion: "v0.4", testSummary: "18 tests passed", previewUrl: "/showcase" },
+  makeSeed("QLL-018", "Turn the stock list into a sector heatmap", "Mia", "coding", 2),
+  makeSeed("QLL-017", "Add five-minute momentum trails", "Noah", "testing", 5),
+  { ...makeSeed("QLL-016", "Create the first Hong Kong market monitor", "Lena", "live", 11), releaseVersion: "v0.4", testSummary: "18 tests passed", previewUrl: "/showcase", files: ["apps/showcase/src/Showcase.tsx", "apps/showcase/src/showcase.css"] },
   {
     ...makeSeed("QLL-015", "Modify the admin control panel", "Guardrail demo", "blocked", 15),
     policy: { outcome: "block", layer: "changeset", ruleId: "SCOPE-001", publicReason: "The control plane is protected.", evidence: ["Protected path: apps/control/app/page.tsx", "0 files promoted"] },
@@ -232,6 +232,14 @@ export async function createBoundaryChallenge(title: string) {
     });
   }
   return request;
+}
+
+export async function createRehearsalFeature(feature: { id: string; request: string }) {
+  const request = await createRequest({ author: "Stage operator", title: feature.request, idempotencyKey: `feature-${feature.id}-${crypto.randomUUID()}`, source: "ops" });
+  return updateRequest(request.id, {
+    presetFeatureId: feature.id,
+    events: [...request.events, makeEvent(request.id, "status", `Signed rehearsal feature selected · ${feature.id}`)],
+  });
 }
 
 export async function rollbackRelease() {

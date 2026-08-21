@@ -1,8 +1,8 @@
 # Qoder Live Lab
 
-An event-ready live development lab for Qoder Cloud Agents. Visitors submit a safe creative request from their phone, watch it move across a public board, and see a verified release appear on the stage display. Unsafe requests and out-of-scope changes are visibly blocked while the current release stays live.
+An event-ready live development lab for Qoder Cloud Agents. Visitors submit a bounded improvement to an intentionally sparse Hong Kong market dashboard, watch it move across a public board, and see a verified release appear on the stage display. Unsafe requests and out-of-scope changes are visibly blocked while the current release stays live.
 
-Live: [Public board](https://qoder-live-lab.vercel.app) · [Stage display](https://qoder-live-lab.vercel.app/stage) · [Creative canvas](https://qoder-live-lab-canvas.vercel.app)
+Live: [Public board](https://qoder-live-lab.vercel.app) · [Release history](https://qoder-live-lab.vercel.app/releases) · [Stage display](https://qoder-live-lab.vercel.app/stage) · [Market canvas](https://qoder-live-lab-canvas.vercel.app)
 
 ## What the audience sees
 
@@ -14,22 +14,23 @@ phone request → QUEUED → CODING → TESTING → DEPLOYING → LIVE
 Qoder candidate branch → diff policy → tests → Preview → active release
 ```
 
-- `/` — public request form and mobile Kanban
+- `/` — public request form, mobile Kanban, and a read-only codebase guide
+- `/releases` — version-by-version release history with change and verification evidence
 - `/stage` — fullscreen stable canvas with release and block notifications
-- `/showcase` — local fallback creative canvas
-- `/ops` — protected operator controls, rollback, and execution-boundary challenges
+- `/showcase` — local fallback for the intentionally simple Hong Kong market dashboard
+- `/ops` — protected operator controls, rollback, execution-boundary challenges, and rehearsal feature launchpad
 
 Qoder only creates a candidate branch. It cannot activate a release. The runner is the sole component allowed to promote a candidate after independent policy, test, CI, and Preview checks.
 
 ## Repository shape
 
 - `app/` — Next.js control plane, board, stage, ops, and API routes
-- `apps/showcase/` — independently deployable Vite + React creative canvas; the only product area Qoder may edit
+- `apps/showcase/` — independently deployable Vite + React market canvas; the only product area Qoder may edit
 - `apps/runner/` — trusted local scheduler and release controller
 - `packages/contracts/` — shared states, API contracts, and policy rules
 - `tests/` — policy, state, SSE, deduplication, and rendered-route tests
 
-Candidate changes are limited to `apps/showcase/src/**`, `apps/showcase/tests/**`, and `apps/showcase/public/**`. The complete agent boundary is in `AGENTS.md`.
+Candidate changes are limited to `apps/showcase/src/**`, `apps/showcase/tests/**`, and `apps/showcase/public/**`. The trusted market fixture, displayed facts, display-only disclaimer, and any trading action remain protected. The complete agent boundary is in `AGENTS.md`.
 
 ## Run locally
 
@@ -86,6 +87,8 @@ The runner creates `qll/task-<id>`, enforces the diff policy, builds in an isola
 | `PIPELINE-001` | blocks CI, hosting, Qoder, and security configuration |
 | `GIT-001` | prevents direct or forced pushes to `main` |
 | `UI-001` | blocks navigation, popups, payments, login, and data collection |
+| `DATA-001` | protects trusted quotes and displayed market facts |
+| `FINANCE-001` | blocks order execution, trading controls, and disclaimer removal |
 
 The public input gate rejects obvious violations immediately. The Qoder policy can return `DECLINED`. The independent diff/CI/deployment gates remain authoritative even if a candidate agent attempts a forbidden change.
 
@@ -101,6 +104,8 @@ npm run test:render
 Before doors open:
 
 - Put `/stage` fullscreen on computer A and `/ops` plus runner logs on computer B.
+- Start with the deliberately sparse baseline: one index, one plain watchlist, and no advanced visualizations.
+- Use the Feature Launchpad to queue the pre-verified sector heatmap, momentum lens, or market command editions. Live mode still follows the normal Qoder and policy path; dry-run mode is visibly labelled rehearsal fallback.
 - Submit one safe visual request and confirm it reaches `LIVE` within five minutes.
 - Run “Modify the admin control panel” from Ops and confirm `BLOCKED`, a rule ID, redacted evidence, `0 files promoted`, and an unchanged stage canvas.
 - Test pause, cancel, runner restart, Qoder credential failure, and rollback.

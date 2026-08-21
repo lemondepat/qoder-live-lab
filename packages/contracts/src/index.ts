@@ -51,6 +51,7 @@ export type ChangeRequest = {
   releaseVersion?: string;
   files?: string[];
   testSummary?: string;
+  presetFeatureId?: string;
   policy?: PolicyDecision;
   events: RequestEvent[];
 };

@@ -15,16 +15,16 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
   title: "Qoder Live Lab",
-  description: "Ask for a change. Watch Qoder build, verify, and ship it live.",
+  description: "Shape a live Hong Kong market dashboard. Watch Qoder build, verify, and ship every bounded change.",
   openGraph: {
     title: "Qoder Live Lab",
-    description: "Ask for a change. Watch it ship.",
+    description: "Shape the market. Watch it ship.",
     images: [{ url: "/og.png", width: 1729, height: 910, alt: "Qoder Live Lab — Ask for a change. Watch it ship." }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Qoder Live Lab",
-    description: "Ask for a change. Watch it ship.",
+    description: "Shape the market. Watch it ship.",
     images: ["/og.png"],
   },
   icons: {

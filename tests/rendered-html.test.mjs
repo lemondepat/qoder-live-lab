@@ -41,16 +41,19 @@ test("server-renders the Qoder Live Lab public board", async () => {
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /<title>Qoder Live Lab<\/title>/i);
-  assert.match(html, /Ask for a change/);
+  assert.match(html, /Shape the market/);
+  assert.match(html, /Ask about this lab/i);
   assert.match(html, /Every change leaves evidence/);
   assert.match(html, /Autonomous/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 
-test("server-renders stage and operator routes", async () => {
-  const [stage, ops] = await Promise.all([render("/stage"), render("/ops")]);
+test("server-renders stage, release history, and operator routes", async () => {
+  const [stage, releases, ops] = await Promise.all([render("/stage"), render("/releases"), render("/ops")]);
   assert.equal(stage.status, 200);
+  assert.equal(releases.status, 200);
   assert.equal(ops.status, 200);
-  assert.match(await stage.text(), /Current verified creative canvas/i);
+  assert.match(await stage.text(), /Current verified market dashboard/i);
+  assert.match(await releases.text(), /See what changed/i);
   assert.match(await ops.text(), /Trusted control plane/i);
 });
