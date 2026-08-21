@@ -1,6 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseFrame, publicProgress } from "../apps/runner/src/qca-provider";
+import { githubSessionResource, parseFrame, publicProgress } from "../apps/runner/src/qca-provider";
+import { loadConfig } from "../apps/runner/src/config";
+
+test("uses the current GitHub session resource shape", () => {
+  const resource = githubSessionResource({
+    ...loadConfig(),
+    githubRepositoryUrl: "https://github.com/example/repo",
+    githubToken: "test-token",
+  });
+  assert.equal(resource.type, "github_repository");
+  assert.equal(resource.url, "https://github.com/example/repo");
+  assert.equal("checkout" in resource, false);
+});
 
 test("parses a QCA SSE frame and keeps its cursor", () => {
   const frame = parseFrame('id: evt_123\nevent: agent.message\ndata: {"content":[{"type":"text","text":"Candidate ready"}]}');
@@ -14,6 +26,10 @@ test("never exposes thinking events", () => {
 
 test("maps tool use to a readable public milestone", () => {
   assert.equal(publicProgress("agent.tool_use", { tool_name: "Edit" }, "evt_2")?.message, "Updating candidate files");
+});
+
+test("maps the current QCA tool name field to a readable public milestone", () => {
+  assert.equal(publicProgress("agent.tool_use", { name: "Read" }, "evt_2b")?.message, "Inspecting the market canvas");
 });
 
 test("stops a turn only at session idle", () => {
