@@ -15,6 +15,7 @@ export function loadConfig() {
     qoderAgentId: process.env.QODER_CLOUD_AGENT_ID,
     qoderEnvironmentId: process.env.QODER_CLOUD_ENVIRONMENT_ID,
     githubRepositoryUrl: process.env.GITHUB_REPOSITORY_URL,
+    qoderGithubToken: process.env.QODER_GITHUB_TOKEN,
     githubToken: process.env.GITHUB_TOKEN,
     githubDefaultBranch: process.env.GITHUB_DEFAULT_BRANCH || "main",
     vercelToken: process.env.VERCEL_TOKEN,
@@ -32,7 +33,7 @@ export function assertQcaConfig(config: RunnerConfig) {
     ["QODER_CLOUD_AGENT_ID", config.qoderAgentId],
     ["QODER_CLOUD_ENVIRONMENT_ID", config.qoderEnvironmentId],
     ["GITHUB_REPOSITORY_URL", config.githubRepositoryUrl],
-    ["GITHUB_TOKEN", config.githubToken],
+    ["QODER_GITHUB_TOKEN", config.qoderGithubToken],
   ].filter(([, value]) => !value).map(([name]) => name);
   if (missing.length) throw new Error(`QCA configuration missing: ${missing.join(", ")}`);
 }
