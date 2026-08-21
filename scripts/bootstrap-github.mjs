@@ -11,19 +11,25 @@ const uploadedBlobs = new Set();
 
 const existingRef = await githubRaw(`/repos/${repository}/git/ref/heads/main`);
 if (existingRef.ok) {
-  throw new Error("Remote main already exists. Refusing to replace a non-empty repository.");
+  const rootResponse = await githubRaw(`/repos/${repository}/contents`);
+  const root = rootResponse.ok ? await rootResponse.json() : [];
+  if (!Array.isArray(root) || root.length !== 1 || root[0]?.name !== ".qll-bootstrap") {
+    throw new Error("Remote main already contains user files. Refusing to replace it.");
+  }
 }
-if (![404, 409].includes(existingRef.status)) throw new Error(`Could not inspect remote main: ${existingRef.status} ${await existingRef.text()}`);
-await github(`/repos/${repository}/contents/.qll-bootstrap`, {
-  method: "PUT",
-  body: JSON.stringify({ message: "Initialize repository transport", content: Buffer.from("Qoder Live Lab bootstrap\n").toString("base64"), branch: "main" }),
-});
+if (!existingRef.ok) {
+  if (![404, 409].includes(existingRef.status)) throw new Error(`Could not inspect remote main: ${existingRef.status} ${await existingRef.text()}`);
+  await github(`/repos/${repository}/contents/.qll-bootstrap`, {
+    method: "PUT",
+    body: JSON.stringify({ message: "Initialize repository transport", content: Buffer.from("Qoder Live Lab bootstrap\n").toString("base64"), branch: "main" }),
+  });
+}
 
 for (const localCommit of commits) {
   const treeEntries = parseTree(git(["ls-tree", "-r", "-z", localCommit]));
   for (const entry of treeEntries) {
     if (uploadedBlobs.has(entry.sha)) continue;
-    const content = execFileSync("git", ["cat-file", "blob", entry.sha]).toString("base64");
+    const content = execFileSync("git", ["cat-file", "blob", entry.sha], { maxBuffer: 32 * 1024 * 1024 }).toString("base64");
     const blob = await github(`/repos/${repository}/git/blobs`, {
       method: "POST",
       body: JSON.stringify({ content, encoding: "base64" }),
