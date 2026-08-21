@@ -15,11 +15,12 @@ type StoredRequest = ChangeRequest & { idempotencyKey: string };
 type MemoryStore = { requests: StoredRequest[]; system: SystemState; initialized: boolean };
 
 const now = () => new Date().toISOString();
+const baselinePreviewUrl = process.env.BASELINE_PREVIEW_URL || "https://qoder-live-lab-canvas-8d0qaj3j9-qt-eam1.vercel.app";
 const defaultRelease = {
   version: "v0.4",
   requestId: "QLL-016",
   requirement: "Create the first Hong Kong market monitor",
-  previewUrl: process.env.NEXT_PUBLIC_SHOWCASE_URL || "/showcase",
+  previewUrl: baselinePreviewUrl,
   activatedAt: new Date(Date.now() - 1000 * 60 * 11).toISOString(),
   healthy: true,
 };
@@ -35,7 +36,7 @@ const defaultSystem: SystemState = {
 const seededRequests: StoredRequest[] = [
   makeSeed("QLL-018", "Turn the stock list into a sector heatmap", "Mia", "coding", 2),
   makeSeed("QLL-017", "Add five-minute momentum trails", "Noah", "testing", 5),
-  { ...makeSeed("QLL-016", "Create the first Hong Kong market monitor", "Lena", "live", 11), releaseVersion: "v0.4", testSummary: "18 tests passed", previewUrl: "/showcase", files: ["apps/showcase/src/Showcase.tsx", "apps/showcase/src/showcase.css"] },
+  { ...makeSeed("QLL-016", "Create the first Hong Kong market monitor", "Lena", "live", 11), releaseVersion: "v0.4", testSummary: "18 tests passed", previewUrl: baselinePreviewUrl, files: ["apps/showcase/src/Showcase.tsx", "apps/showcase/src/showcase.css"] },
   {
     ...makeSeed("QLL-015", "Modify the admin control panel", "Guardrail demo", "blocked", 15),
     policy: { outcome: "block", layer: "changeset", ruleId: "SCOPE-001", publicReason: "The control plane is protected.", evidence: ["Protected path: apps/control/app/page.tsx", "0 files promoted"] },
@@ -246,6 +247,29 @@ export async function rollbackRelease() {
   const system = await readSystem();
   if (!system.previousRelease) return system;
   const next = { ...system, activeRelease: system.previousRelease, previousRelease: system.activeRelease };
+  await writeSystem(next);
+  return next;
+}
+
+export async function resetOpeningRelease() {
+  const system = await readSystem();
+  const baseline = (await readRequests()).find((item) => item.releaseVersion === "v0.4" || item.id === "QLL-016");
+  if (!baseline) return system;
+  await updateRequest(baseline.id, { previewUrl: baselinePreviewUrl, releaseVersion: "v0.4" });
+  if (system.activeRelease.version === "v0.4" && system.activeRelease.previewUrl === baselinePreviewUrl) return system;
+  const next: SystemState = {
+    ...system,
+    previousRelease: system.activeRelease,
+    activeRelease: {
+      version: "v0.4",
+      requestId: baseline.id,
+      requirement: baseline.title,
+      previewUrl: baselinePreviewUrl,
+      commitSha: baseline.commitSha,
+      activatedAt: baseline.completedAt || baseline.updatedAt,
+      healthy: true,
+    },
+  };
   await writeSystem(next);
   return next;
 }
