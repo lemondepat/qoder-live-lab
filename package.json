@@ -18,6 +18,7 @@
     "test:render": "npm run build && node --test tests/rendered-html.test.mjs",
     "check": "npm run lint && npm test && npm run typecheck --workspace @qoder-live-lab/runner && npm run build && npm run build --workspace @qoder-live-lab/showcase",
     "policy:changeset": "tsx scripts/check-candidate.ts",
+    "github:bootstrap": "node scripts/bootstrap-github.mjs",
     "qca:doctor": "npm run doctor --workspace @qoder-live-lab/runner",
     "qca:bootstrap": "npm run bootstrap --workspace @qoder-live-lab/runner",
     "runner": "npm run dev --workspace @qoder-live-lab/runner",
