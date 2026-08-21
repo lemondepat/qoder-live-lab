@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { MARKET_INDICES, MARKET_QUOTES, type MarketQuote } from "./market-data";
+import { computeMarketPulse } from "./market-pulse";
 import "./showcase.css";
 
 type Edition = "baseline" | "sector-heatmap" | "momentum-lens" | "market-command";
@@ -34,10 +35,31 @@ export function Showcase() {
       <section className="index-row">
         {MARKET_INDICES.map((index) => <article key={index.symbol}><div><span>{index.symbol}</span><small>{index.label}</small></div><strong>{index.value}</strong><b>+{index.change.toFixed(2)}%</b></article>)}
       </section>
+      <MarketPulseStrip quotes={quotes} />
       {edition === "baseline" ? <BaselineTable quotes={quotes} /> : <EnhancedMarket quotes={quotes} edition={edition} />}
       <footer className="market-footer"><span>DISPLAY ONLY · NOT INVESTMENT ADVICE</span><span>{advanced ? `FEATURE EDITION / ${edition.toUpperCase()}` : "BASELINE RELEASE / INTENTIONALLY SIMPLE"}</span></footer>
     </main>
   );
+}
+
+function MarketPulseStrip({ quotes }: { quotes: MarketQuote[] }) {
+  const pulse = computeMarketPulse(quotes);
+  const tone = pulse.averageChange >= 0 ? "up" : "down";
+  const signed = (value: number) => `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+
+  return <section className="pulse-strip" aria-label="Market pulse breadth">
+    <span className="pulse-label">MARKET PULSE</span>
+    <div className="pulse-chips">
+      <article className="pulse-chip"><small>ADVANCING</small><b className="up">{pulse.advancers}</b></article>
+      <article className="pulse-chip"><small>DECLINING</small><b className="down">{pulse.decliners}</b></article>
+      <article className="pulse-chip"><small>UNCHANGED</small><b>{pulse.unchanged}</b></article>
+      <article className="pulse-chip"><small>BREADTH</small><b className={pulse.advancerShare >= 50 ? "up" : "down"}>{pulse.advancerShare}%</b></article>
+      <article className="pulse-chip"><small>AVG MOVE</small><b className={tone}>{signed(pulse.averageChange)}</b></article>
+      {pulse.leader && <article className="pulse-chip pulse-chip-wide"><small>LEADER</small><b className="up">{pulse.leader.symbol} {signed(pulse.leader.change)}</b></article>}
+      {pulse.laggard && <article className="pulse-chip pulse-chip-wide"><small>LAGGARD</small><b className="down">{pulse.laggard.symbol} {signed(pulse.laggard.change)}</b></article>}
+    </div>
+    <div className="pulse-meter" role="img" aria-label={`${pulse.advancers} of ${pulse.total} watchlist stocks advancing`}><i style={{ width: `${pulse.advancerShare}%` }} /></div>
+  </section>;
 }
 
 function BaselineTable({ quotes }: { quotes: MarketQuote[] }) {
