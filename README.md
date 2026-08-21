@@ -2,6 +2,8 @@
 
 An event-ready live development lab for Qoder Cloud Agents. Visitors submit a safe creative request from their phone, watch it move across a public board, and see a verified release appear on the stage display. Unsafe requests and out-of-scope changes are visibly blocked while the current release stays live.
 
+Live: [Public board](https://qoder-live-lab.vercel.app) · [Stage display](https://qoder-live-lab.vercel.app/stage) · [Creative canvas](https://qoder-live-lab-canvas.vercel.app)
+
 ## What the audience sees
 
 ```text
