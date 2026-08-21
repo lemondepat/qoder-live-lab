@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { githubSessionResource, parseFrame, publicProgress } from "../apps/runner/src/qca-provider";
+import { githubSessionResource, parseFrame, publicProgress, sessionIsIdle } from "../apps/runner/src/qca-provider";
 import { loadConfig } from "../apps/runner/src/config";
 
 test("uses the current GitHub session resource shape", () => {
@@ -43,4 +43,22 @@ test("recognizes an agent boundary refusal without exposing reasoning", () => {
   const progress = publicProgress("agent.message", { content: [{ type: "text", text: "DECLINED: the request targets a protected path." }] }, "evt_4");
   assert.equal(progress?.declined, true);
   assert.match(progress?.message ?? "", /DECLINED/);
+});
+
+test("recognizes an already-idle persisted session during resume", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ status: "idle" }), { status: 200 });
+  try {
+    const idle = await sessionIsIdle("sess_resume", {
+      ...loadConfig(),
+      qoderPat: "qoder-pat",
+      qoderAgentId: "agent-id",
+      qoderEnvironmentId: "environment-id",
+      githubRepositoryUrl: "https://github.com/example/repo",
+      qoderGithubToken: "candidate-token",
+    });
+    assert.equal(idle, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

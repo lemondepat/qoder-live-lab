@@ -10,6 +10,8 @@ import type { RunnerConfig } from "./config";
 const exec = promisify(execFile);
 
 export type Candidate = { branch: string; commitSha: string; files: string[]; diff: string; policy: PolicyDecision; testSummary?: string };
+export type GitHubCheck = { name: string; status: string; conclusion: string | null };
+export type RequiredCheckState = "missing" | "pending" | "success" | "failed";
 
 export async function inspectAndVerify(branch: string, config: RunnerConfig): Promise<Candidate> {
   if (config.dryRun) {
@@ -54,21 +56,27 @@ export async function waitForChecks(candidate: Candidate, config: RunnerConfig) 
   if (config.dryRun || !config.githubToken || !config.githubRepositoryUrl) return;
   const repo = parseRepository(config.githubRepositoryUrl);
   const deadline = Date.now() + 75_000;
-  let sawChecks = false;
+  let sawRequiredCheck = false;
   while (Date.now() < deadline) {
     const response = await github(config, `/repos/${repo}/commits/${candidate.commitSha}/check-runs`);
     if (response.ok) {
-      const data = await response.json() as { check_runs: Array<{ status: string; conclusion: string | null }> };
-      if (data.check_runs.length) {
-        sawChecks = true;
-        if (data.check_runs.some((check) => check.status === "completed" && check.conclusion !== "success" && check.conclusion !== "neutral" && check.conclusion !== "skipped")) throw new Error("A required GitHub check failed");
-        if (data.check_runs.every((check) => check.status === "completed")) return;
-      }
+      const data = await response.json() as { check_runs: GitHubCheck[] };
+      const state = requiredCheckState(data.check_runs);
+      if (state !== "missing") sawRequiredCheck = true;
+      if (state === "failed") throw new Error("The required GitHub status check verify failed");
+      if (state === "success") return;
     }
     await sleep(3000);
   }
-  if (sawChecks) throw new Error("GitHub checks exceeded the release time budget");
-  throw new Error("No GitHub verification checks appeared for the candidate commit");
+  if (sawRequiredCheck) throw new Error("The required GitHub status check verify exceeded the release time budget");
+  throw new Error("The required GitHub status check verify did not appear for the candidate commit");
+}
+
+export function requiredCheckState(checks: GitHubCheck[], requiredName = "verify"): RequiredCheckState {
+  const required = checks.filter((check) => check.name === requiredName);
+  if (!required.length) return "missing";
+  if (required.some((check) => check.status !== "completed")) return "pending";
+  return required.every((check) => check.conclusion === "success") ? "success" : "failed";
 }
 
 export async function findPreview(candidate: Candidate, config: RunnerConfig, presetFeatureId?: string) {
