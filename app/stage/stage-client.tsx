@@ -3,11 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import type { BoardSnapshot, ChangeRequest } from "@qoder-live-lab/contracts";
 import { QRCodeSVG } from "qrcode.react";
+import { isRecentBlockedEvent, STAGE_BLOCKED_DURATION_MS } from "@/lib/stage-events";
 
 export function StageClient() {
   const [board, setBoard] = useState<BoardSnapshot>();
   const [blocked, setBlocked] = useState<ChangeRequest>();
   const lastBlockedId = useRef<string | undefined>(undefined);
+  const initialized = useRef(false);
+  const hideBlockedTimer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     let active = true;
@@ -16,15 +19,19 @@ export function StageClient() {
       if (!active) return;
       setBoard(next);
       const latest = next.requests.find((item) => item.status === "blocked" || item.status === "rejected");
-      if (latest && latest.id !== lastBlockedId.current) {
+      const shouldShow = initialized.current ? latest?.id !== lastBlockedId.current : isRecentBlockedEvent(latest);
+      initialized.current = true;
+      if (latest) lastBlockedId.current = latest.id;
+      if (latest && shouldShow) {
         lastBlockedId.current = latest.id;
         setBlocked(latest);
-        window.setTimeout(() => setBlocked(undefined), 8000);
+        window.clearTimeout(hideBlockedTimer.current);
+        hideBlockedTimer.current = window.setTimeout(() => setBlocked(undefined), STAGE_BLOCKED_DURATION_MS);
       }
     };
     load().catch(() => undefined);
     const timer = window.setInterval(() => load().catch(() => undefined), 2000);
-    return () => { active = false; window.clearInterval(timer); };
+    return () => { active = false; window.clearInterval(timer); window.clearTimeout(hideBlockedTimer.current); };
   }, []);
 
   const release = board?.system.activeRelease;
