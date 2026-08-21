@@ -20,7 +20,7 @@ const lanes: { key: string; statuses: RequestStatus[]; label: string; eyebrow: s
   { key: "queued", statuses: ["queued"], label: "Queue", eyebrow: "Waiting" },
   { key: "coding", statuses: ["coding"], label: "Building", eyebrow: "Qoder Cloud Agent" },
   { key: "testing", statuses: ["testing", "deploying"], label: "Verifying", eyebrow: "Policy + tests" },
-  { key: "live", statuses: ["live"], label: "Shipped", eyebrow: "Current release" },
+  { key: "live", statuses: ["live"], label: "Shipped", eyebrow: "Verified releases" },
 ];
 
 export default function Home() {

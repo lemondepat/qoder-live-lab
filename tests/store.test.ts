@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createBoundaryChallenge, createRequest, finishRequest, getBoard, setSystem } from "../lib/store";
+import { createBoundaryChallenge, createRequest, finishRequest, getBoard, resetOpeningRelease, setSystem } from "../lib/store";
 
 test("creates an allowed request in the queue idempotently", async () => {
   const input = { author: "Tester", title: "Add a soft aurora that responds to pointer movement", idempotencyKey: "test-idempotency-1" };
@@ -31,4 +31,12 @@ test("promotion and rollback preserve immutable release evidence", async () => {
   assert.equal(finished?.status, "live");
   assert.equal(board.system.activeRelease.requestId, request.id);
   assert.equal(board.system.previousRelease?.version, "v0.4");
+});
+
+test("resets the Stage to the immutable, intentionally simple opening release", async () => {
+  await resetOpeningRelease();
+  const board = await getBoard();
+  assert.equal(board.system.activeRelease.version, "v0.4");
+  assert.match(board.system.activeRelease.previewUrl, /qoder-live-lab-canvas-8d0qaj3j9/);
+  assert.notEqual(board.system.previousRelease?.version, "v0.4");
 });
