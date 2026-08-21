@@ -98,14 +98,28 @@ export async function findPreview(candidate: Candidate, config: RunnerConfig, pr
       if (deployment?.state === "ERROR") throw new Error("Vercel preview failed");
       if (deployment?.state === "READY") {
         const preview = `https://${deployment.url}`;
-        const health = await fetch(preview, { redirect: "follow" });
-        if (!health.ok) throw new Error(`Preview health check failed: ${health.status}`);
+        const health = await fetch(preview, { redirect: "manual" });
+        const failure = previewHealthFailure({
+          status: health.status,
+          contentType: health.headers.get("content-type"),
+          location: health.headers.get("location"),
+          body: health.ok ? await health.text() : "",
+        });
+        if (failure) throw new Error(`Preview health check failed: ${failure}`);
         return preview;
       }
     }
     await sleep(3000);
   }
   throw new Error("Vercel preview exceeded the release time budget");
+}
+
+export function previewHealthFailure(input: { status: number; contentType?: string | null; location?: string | null; body: string }) {
+  if (input.status < 200 || input.status >= 300) return `HTTP ${input.status}${input.location ? " redirect" : ""}`;
+  if (input.location) return "unexpected redirect";
+  if (!input.contentType?.toLowerCase().includes("text/html")) return "response was not HTML";
+  if (!/<title>\s*Qoder Live Canvas\s*<\/title>/i.test(input.body)) return "canvas marker was missing";
+  return undefined;
 }
 
 export async function mergePullRequest(prNumber: number | undefined, candidate: Candidate, requestId: string, config: RunnerConfig) {
