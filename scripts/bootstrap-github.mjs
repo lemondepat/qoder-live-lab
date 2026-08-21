@@ -9,6 +9,16 @@ const commits = git(["rev-list", "--reverse", "main"]).trim().split("\n").filter
 const mapped = new Map();
 const uploadedBlobs = new Set();
 
+const existingRef = await githubRaw(`/repos/${repository}/git/ref/heads/main`);
+if (existingRef.ok) {
+  throw new Error("Remote main already exists. Refusing to replace a non-empty repository.");
+}
+if (![404, 409].includes(existingRef.status)) throw new Error(`Could not inspect remote main: ${existingRef.status} ${await existingRef.text()}`);
+await github(`/repos/${repository}/contents/.qll-bootstrap`, {
+  method: "PUT",
+  body: JSON.stringify({ message: "Initialize repository transport", content: Buffer.from("Qoder Live Lab bootstrap\n").toString("base64"), branch: "main" }),
+});
+
 for (const localCommit of commits) {
   const treeEntries = parseTree(git(["ls-tree", "-r", "-z", localCommit]));
   for (const entry of treeEntries) {
@@ -46,9 +56,9 @@ for (const localCommit of commits) {
 }
 
 const head = mapped.get(commits.at(-1));
-await github(`/repos/${repository}/git/refs`, {
-  method: "POST",
-  body: JSON.stringify({ ref: "refs/heads/main", sha: head }),
+await github(`/repos/${repository}/git/refs/heads/main`, {
+  method: "PATCH",
+  body: JSON.stringify({ sha: head, force: true }),
 });
 process.stdout.write(`Published https://github.com/${repository} at ${head}\n`);
 
@@ -65,7 +75,13 @@ function parseTree(value) {
 }
 
 async function github(path, init) {
-  const response = await fetch(`https://api.github.com${path}`, {
+  const response = await githubRaw(path, init);
+  if (!response.ok) throw new Error(`GitHub API ${response.status}: ${await response.text()}`);
+  return response.json();
+}
+
+function githubRaw(path, init = {}) {
+  return fetch(`https://api.github.com${path}`, {
     ...init,
     headers: {
       authorization: `Bearer ${token}`,
@@ -74,6 +90,4 @@ async function github(path, init) {
       "x-github-api-version": "2022-11-28",
     },
   });
-  if (!response.ok) throw new Error(`GitHub API ${response.status}: ${await response.text()}`);
-  return response.json();
 }
