@@ -7,10 +7,13 @@ test("uses the current GitHub session resource shape", () => {
   const resource = githubSessionResource({
     ...loadConfig(),
     githubRepositoryUrl: "https://github.com/example/repo",
-    githubToken: "test-token",
+    qoderGithubToken: "candidate-token",
+    githubToken: "trusted-controller-token",
   });
   assert.equal(resource.type, "github_repository");
   assert.equal(resource.url, "https://github.com/example/repo");
+  assert.equal(resource.authorization_token, "candidate-token");
+  assert.notEqual(resource.authorization_token, "trusted-controller-token");
   assert.equal("checkout" in resource, false);
 });
 

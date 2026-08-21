@@ -6,6 +6,7 @@ const required = {
   QODER_CLOUD_AGENT_ID: config.qoderAgentId,
   QODER_CLOUD_ENVIRONMENT_ID: config.qoderEnvironmentId,
   GITHUB_REPOSITORY_URL: config.githubRepositoryUrl,
+  QODER_GITHUB_TOKEN: config.qoderGithubToken,
   GITHUB_TOKEN: config.githubToken,
 };
 const missing = Object.entries(required).filter(([, value]) => !value).map(([key]) => key);

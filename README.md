@@ -53,7 +53,7 @@ The example environment starts in `DRY_RUN=true`. This exercises queueing, polic
 ## Connect Qoder Cloud Agents
 
 1. Create a Qoder PAT, Cloud Agent, and restricted Cloud Environment.
-2. Authorize the public GitHub repository and give the Qoder identity permission to push only task branches.
+2. Give Qoder a repository-scoped token with only Contents read/write, used solely to push task branches. Do not grant it Pull requests, Actions, status, deployment, or administration permissions.
 3. Configure the environment with fixed dependencies and only read/glob/grep/edit/write/bash tools.
 4. Set `QODER_PAT`, `QODER_CLOUD_AGENT_ID`, `QODER_CLOUD_ENVIRONMENT_ID`, and `DRY_RUN=false` on computer B.
 5. Validate the connection before rehearsal:
@@ -66,8 +66,8 @@ The provider opens the SSE stream before sending work, stores every Qoder event 
 
 ## GitHub and release setup
 
-- Protect `main`: require pull requests and the `candidate-gate` workflow; prohibit force-pushes.
-- Give the runner a fine-grained GitHub token scoped to this repository.
+- Protect `main`: require pull requests and the `verify` check, enforce the rule for administrators, and prohibit force-pushes and deletion.
+- Give the trusted runner a separate fine-grained GitHub token scoped to this repository for PR, CI, merge, and release operations. Never mount that token into Qoder.
 - Deploy the root as the control project and `apps/showcase` as the canvas project on Vercel.
 - Set `NEXT_PUBLIC_SHOWCASE_URL` on the control project to the current immutable canvas release.
 - Set `VERCEL_TOKEN` and `VERCEL_SHOWCASE_PROJECT_ID` only on computer B, never in Qoder's environment.

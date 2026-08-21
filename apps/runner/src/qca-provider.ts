@@ -111,7 +111,7 @@ export function githubSessionResource(config: RunnerConfig) {
   return {
     type: "github_repository" as const,
     url: config.githubRepositoryUrl,
-    authorization_token: config.githubToken,
+    authorization_token: config.qoderGithubToken,
     mount_path: "/data/workspace/qoder-live-lab",
   };
 }
