@@ -68,7 +68,7 @@ export async function runQca(
       }
     }
 
-    let streamResponse = await openStream(sessionId, config, controller.signal, cursor);
+    let streamResponse = await openStreamWithRetry(sessionId, config, controller.signal, cursor, onProgress);
     if (!request.qcaPromptSentAt) {
       const prompt = buildPrompt(request, branch);
       const sendResponse = await fetch(`${config.qoderApiBase}/sessions/${sessionId}/events`, { method: "POST", headers, body: JSON.stringify({ events: [{ type: "user.message", content: [{ type: "text", text: prompt }] }] }) });
@@ -77,22 +77,27 @@ export async function runQca(
     }
 
     while (!controller.signal.aborted) {
-      const consumed = await consumeSse(streamResponse.body!, onProgress, cursor);
+      const consumed = await consumeSse(streamResponse.body!, onProgress, cursor, controller.signal);
       cursor = consumed.cursor;
       declined ||= consumed.declined;
       if (consumed.idle) {
         if (declined) throw new Error("Agent DECLINED the out-of-scope requirement");
         return { sessionId };
       }
+      if (controller.signal.aborted) break;
+      if (consumed.interrupted) {
+        await onProgress({ kind: "status", message: "Cloud event stream interrupted · replaying verified history" });
+      }
       const replay = await replayHistory(sessionId, config, cursor, onProgress);
       cursor = replay.cursor;
       declined ||= replay.declined;
-      if (replay.idle) {
+      const sessionIdle = replay.idle || await sessionIsIdle(sessionId, config).catch(() => false);
+      if (sessionIdle) {
         if (declined) throw new Error("Agent DECLINED the out-of-scope requirement");
         return { sessionId };
       }
       await onProgress({ kind: "status", message: "Reconnecting to the Cloud event stream" });
-      streamResponse = await openStream(sessionId, config, controller.signal, cursor);
+      streamResponse = await openStreamWithRetry(sessionId, config, controller.signal, cursor, onProgress);
     }
     throw new Error("QCA session exceeded the agent time budget");
   } catch (error) {
@@ -151,6 +156,51 @@ async function openStream(sessionId: string, config: RunnerConfig, signal: Abort
   return response;
 }
 
+async function openStreamWithRetry(
+  sessionId: string,
+  config: RunnerConfig,
+  signal: AbortSignal,
+  cursor: string | undefined,
+  onProgress: (event: AgentProgress) => Promise<void>,
+) {
+  let attempt = 0;
+  while (!signal.aborted) {
+    try {
+      return await openStream(sessionId, config, signal, cursor);
+    } catch (error) {
+      if (signal.aborted || !isRetryableStreamError(error)) throw error;
+      attempt += 1;
+      if (attempt === 1 || attempt % 5 === 0) {
+        await onProgress({ kind: "status", message: `Cloud event stream unavailable · retrying (${attempt})` });
+      }
+      await waitForRetry(Math.min(500 * (2 ** Math.min(attempt - 1, 3)), 4_000), signal);
+    }
+  }
+  throw signal.reason ?? new Error("QCA event stream connection aborted");
+}
+
+function isRetryableStreamError(error: unknown) {
+  const match = error instanceof Error ? error.message.match(/QCA stream failed: (\d{3})/) : undefined;
+  if (!match) return true;
+  const status = Number(match[1]);
+  return status === 408 || status === 429 || status >= 500;
+}
+
+function waitForRetry(delayMs: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) { reject(signal.reason ?? new DOMException("Aborted", "AbortError")); return; }
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 async function replayHistory(sessionId: string, config: RunnerConfig, afterId: string | undefined, onProgress: (event: AgentProgress) => Promise<void>) {
   let cursor = afterId;
   let idle = false;
@@ -170,15 +220,27 @@ async function replayHistory(sessionId: string, config: RunnerConfig, afterId: s
   return { cursor, idle, declined };
 }
 
-async function consumeSse(stream: ReadableStream<Uint8Array>, onProgress: (event: AgentProgress) => Promise<void>, initialCursor?: string) {
+export async function consumeSse(
+  stream: ReadableStream<Uint8Array>,
+  onProgress: (event: AgentProgress) => Promise<void>,
+  initialCursor?: string,
+  signal?: AbortSignal,
+) {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let cursor = initialCursor;
   let declined = false;
   while (true) {
-    const { value, done } = await reader.read();
-    if (done) return { cursor, idle: false, declined };
+    let value: Uint8Array | undefined;
+    let done: boolean;
+    try {
+      ({ value, done } = await reader.read());
+    } catch (error) {
+      if (signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) throw error;
+      return { cursor, idle: false, declined, interrupted: true };
+    }
+    if (done) return { cursor, idle: false, declined, interrupted: false };
     buffer += decoder.decode(value, { stream: true });
     let boundary;
     while ((boundary = buffer.indexOf("\n\n")) >= 0) {
@@ -190,7 +252,7 @@ async function consumeSse(stream: ReadableStream<Uint8Array>, onProgress: (event
       const progress = publicProgress(parsed.event, parsed.data, parsed.id);
       if (progress) await onProgress(progress);
       if (progress?.declined) declined = true;
-      if (progress?.idle) { await reader.cancel(); return { cursor, idle: true, declined }; }
+      if (progress?.idle) { await reader.cancel(); return { cursor, idle: true, declined, interrupted: false }; }
     }
   }
 }

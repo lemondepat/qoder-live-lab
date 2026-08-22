@@ -29,6 +29,7 @@ const lanes: { key: string; statuses: RequestStatus[]; label: string; eyebrow: s
   { key: "coding", statuses: ["coding"], label: "Building", eyebrow: "Qoder Cloud Agent" },
   { key: "testing", statuses: ["testing", "deploying"], label: "Verifying", eyebrow: "Policy + tests" },
   { key: "live", statuses: ["live"], label: "Shipped", eyebrow: "Verified releases" },
+  { key: "attention", statuses: ["failed", "cancelled"], label: "Needs attention", eyebrow: "Visible terminal state" },
 ];
 
 export default function Home() {
@@ -83,7 +84,7 @@ export default function Home() {
 }
 
 function RequestCard({ card }: { card: ChangeRequest }) {
-  const tone = card.status === "live" ? "green" : card.status === "testing" || card.status === "deploying" ? "cyan" : card.status === "blocked" || card.status === "rejected" ? "orange" : "purple";
+  const tone = card.status === "live" ? "green" : card.status === "testing" || card.status === "deploying" ? "cyan" : card.status === "blocked" || card.status === "rejected" || card.status === "failed" || card.status === "cancelled" ? "orange" : "purple";
   return <details className={`request-card ${tone}`}><summary><div className="card-top"><span>{card.id}</span><span>{card.status.toUpperCase()}</span></div><h3>{card.title}</h3><p>Requested by {card.author}</p><div className="card-meta"><span>{card.releaseVersion ?? card.testSummary ?? card.events.at(-1)?.message ?? "Awaiting evidence"}</span><b>＋</b></div></summary><div className="card-detail">{card.policy && <div className="policy-evidence"><b>{card.policy.ruleId}</b><p>{card.policy.publicReason}</p>{card.policy.evidence.map((item) => <span key={item}>↳ {item}</span>)}</div>}{card.files?.map((file) => <span key={file}>EDIT · {file}</span>)}{card.events.slice(-4).map((event) => <span key={event.id}>{event.kind.toUpperCase()} · {event.message}</span>)}{card.pullRequestUrl && <a href={card.pullRequestUrl} target="_blank" rel="noreferrer">Open pull request ↗</a>}{card.previewUrl && <a href={card.previewUrl} target="_blank" rel="noreferrer">Open preview ↗</a>}</div></details>;
 }
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { githubSessionResource, parseFrame, publicProgress, sessionIsIdle } from "../apps/runner/src/qca-provider";
+import { consumeSse, githubSessionResource, parseFrame, publicProgress, sessionIsIdle } from "../apps/runner/src/qca-provider";
 import { loadConfig } from "../apps/runner/src/config";
 
 test("uses the current GitHub session resource shape", () => {
@@ -21,6 +21,25 @@ test("parses a QCA SSE frame and keeps its cursor", () => {
   const frame = parseFrame('id: evt_123\nevent: agent.message\ndata: {"content":[{"type":"text","text":"Candidate ready"}]}');
   assert.equal(frame?.id, "evt_123");
   assert.equal(frame?.event, "agent.message");
+});
+
+test("keeps the last cursor when a QCA stream is transiently terminated", async () => {
+  const encoder = new TextEncoder();
+  const progress: string[] = [];
+  let reads = 0;
+  const stream = { getReader: () => ({
+    read: async () => {
+      if (reads++ === 0) return { value: encoder.encode('id: evt_terminated\nevent: agent.tool_use\ndata: {"name":"Edit"}\n\n'), done: false };
+      throw new TypeError("terminated");
+    },
+    cancel: async () => undefined,
+  }) } as unknown as ReadableStream<Uint8Array>;
+
+  const result = await consumeSse(stream, async (event) => { progress.push(event.message); });
+
+  assert.equal(result.cursor, "evt_terminated");
+  assert.equal(result.interrupted, true);
+  assert.deepEqual(progress, ["Updating candidate files"]);
 });
 
 test("never exposes thinking events", () => {
