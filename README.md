@@ -34,7 +34,7 @@ Candidate changes are limited to `apps/showcase/src/**`, `apps/showcase/tests/**
 
 ## Connect the live Hong Kong market feed
 
-Computer B owns a read-only market-data sidecar. It starts one long-lived Longbridge OpenAPI session, subscribes to the three Hang Seng indices and six watchlist equities, folds quote ticks into a sanitized snapshot, and posts that snapshot to the control plane. Neon stores only public market facts; Longbridge tokens never enter Vercel, the browser, Qoder, or the repository.
+Computer B owns a read-only market-data sidecar. It starts one long-lived Longbridge OpenAPI session, subscribes to the three Hang Seng indices and six watchlist equities, fetches each instrument's intraday history once, and then folds quote pushes into the current minute. On reconnect it fetches the history once more to fill the gap while preserving the last good shared cache. The Runner posts one sanitized snapshot to the control plane every 20 seconds, so every browser shares the same provider connection and cache. Neon stores only public market facts; Longbridge tokens never enter Vercel, the browser, Qoder, or the repository.
 
 Install and authorize the official Longbridge CLI on computer B:
 
@@ -44,7 +44,7 @@ longbridge auth login
 longbridge auth status
 ```
 
-Set `MARKET_FEED_PROVIDER=longbridge` and the absolute `LONGBRIDGE_BINARY` path in the runner environment. `/api/market` exposes only the validated public snapshot. The Canvas polls this endpoint every two seconds and shows `LIVE`, `STALE`, `DELAYED`, or `DEMO` explicitly. A disconnected feed preserves the last good tick and never invents replacement values.
+Set `MARKET_FEED_PROVIDER=longbridge` and the absolute `LONGBRIDGE_BINARY` path in the runner environment. `/api/market` exposes only the validated public snapshot. The Canvas polls this shared cache every 20 seconds and shows `LIVE`, `STALE`, `DELAYED`, or `DEMO` explicitly. A disconnected feed preserves the last good tick and never invents replacement values. See `docs/runner/market-capability-catalog.md` for the read-only APIs prepared for later dashboard features.
 
 ## Run locally
 

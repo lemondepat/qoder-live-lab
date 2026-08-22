@@ -30,7 +30,6 @@ export function loadConfig() {
     marketFeedProvider: process.env.MARKET_FEED_PROVIDER || "off",
     longbridgeBinary: process.env.LONGBRIDGE_BINARY || "/opt/homebrew/bin/longbridge",
     marketPublishMs: Number(process.env.MARKET_PUBLISH_MS || 20_000),
-    marketIntradayRefreshMs: Number(process.env.MARKET_INTRADAY_REFRESH_MS || 60_000),
   };
 }
 
