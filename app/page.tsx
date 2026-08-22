@@ -262,6 +262,7 @@ function TicketDialog({ card, activeRelease, previousRelease, onClose }: { card:
   const releasePreviewUrl = card.previewUrl ?? release?.previewUrl;
   const releaseCommit = card.commitSha ?? release?.commitSha;
   const releaseActivatedAt = release?.activatedAt ?? card.completedAt;
+  const qoderSessionUrl = card.qcaSessionId ? `https://qoder.com/cloud/sessions/${encodeURIComponent(card.qcaSessionId)}` : undefined;
   const promoted = card.status === "live" && Boolean(releaseVersion);
   const currentRelease = promoted && (activeRelease.requestId === card.id || activeRelease.version === releaseVersion);
   const stopped = ["rejected", "blocked", "failed", "cancelled"].includes(card.status);
@@ -316,7 +317,7 @@ function TicketDialog({ card, activeRelease, previousRelease, onClose }: { card:
 
         <footer className="ticket-modal-footer-v2">
           <span>{promoted ? `IMMUTABLE PREVIEW · ${releaseVersion}` : stopped ? `NOT PROMOTED · ${activeRelease.version} REMAINS LIVE` : "CANDIDATE IN PROGRESS"}</span>
-          <div>{card.pullRequestUrl && <a href={card.pullRequestUrl} target="_blank" rel="noreferrer">VIEW PULL REQUEST ↗</a>}{releasePreviewUrl && <a href={releasePreviewUrl} target="_blank" rel="noreferrer">OPEN {promoted ? "THIS VERSION" : "PREVIEW"} ↗</a>}</div>
+          <div>{qoderSessionUrl && <a className="ticket-qoder-link-v2" href={qoderSessionUrl} target="_blank" rel="noreferrer">QODER CLOUD SESSION ↗</a>}{card.pullRequestUrl && <a href={card.pullRequestUrl} target="_blank" rel="noreferrer">VIEW PULL REQUEST ↗</a>}{releasePreviewUrl && <a href={releasePreviewUrl} target="_blank" rel="noreferrer">OPEN {promoted ? "THIS VERSION" : "PREVIEW"} ↗</a>}</div>
         </footer>
       </section>
     </div>
