@@ -63,3 +63,12 @@ test("the public experience protects phone scan, keyboard, and touch workflows",
   assert.match(styles, /-webkit-overflow-scrolling:touch/);
   assert.match(styles, /@media\(max-width:900px\) and \(max-height:520px\) and \(orientation:landscape\)/);
 });
+
+test("the Stage bar matches the public header height", async () => {
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(styles, /\.stage-shell \{[^}]*grid-template-rows:72px 1fr;/);
+  assert.match(styles, /\.public-header-v2 \{[\s\S]*?height:72px;/);
+  assert.match(styles, /@media\(max-width:760px\)\{[\s\S]*?\.stage-shell\{grid-template-rows:64px 1fr\}/);
+  assert.match(styles, /@media\(max-width:820px\) \{[\s\S]*?\.public-header-v2 \{ height:64px;/);
+});
