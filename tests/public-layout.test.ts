@@ -26,6 +26,8 @@ test("the public experience is a fixed-screen nav switcher", async () => {
   assert.match(page, /aria-haspopup="dialog"/);
   assert.match(page, /role="dialog" aria-modal="true"/);
   assert.match(page, /VERSION EVIDENCE/);
+  assert.match(page, /https:\/\/qoder\.com\/cloud\/sessions\/\$\{encodeURIComponent\(card\.qcaSessionId\)\}/);
+  assert.match(page, /qoderSessionUrl && <a className="ticket-qoder-link-v2" href=\{qoderSessionUrl\} target="_blank" rel="noreferrer">QODER CLOUD SESSION ↗<\/a>/);
   assert.doesNotMatch(page, /href="\/releases"/);
   assert.doesNotMatch(page, /scrollIntoView/);
   assert.doesNotMatch(page, /page-proof-v2/);
@@ -42,6 +44,7 @@ test("the public experience is a fixed-screen nav switcher", async () => {
   assert.match(styles, /\.pipeline-board-v2 \{[\s\S]*?grid-template-columns:repeat\(6,/);
   assert.match(styles, /\.pipeline-lane-v2\.lane-deploying>header i/);
   assert.match(styles, /\.ticket-modal-scroll-v2 \{[\s\S]*?overflow-y:auto;/);
+  assert.match(styles, /\.ticket-modal-footer-v2 a\.ticket-qoder-link-v2 \{/);
   assert.doesNotMatch(styles, /pipeline-log-v2/);
 });
 

@@ -298,6 +298,7 @@ html:has(.public-v2),body:has(.public-v2) { height:100%;overflow:hidden;overscro
 .ticket-modal-footer-v2>span { color:#73786f;font:800 8px monospace;letter-spacing:.08em; }
 .ticket-modal-footer-v2>div { display:flex;justify-content:flex-end;gap:8px; }
 .ticket-modal-footer-v2 a { padding:10px 12px;border:1px solid #3a3d38;border-radius:6px;color:#c9cdc5;font:800 8px monospace;letter-spacing:.05em; }
+.ticket-modal-footer-v2 a.ticket-qoder-link-v2 { border-color:#20e46b88;color:var(--public-green); }
 .ticket-modal-footer-v2 a:last-child { border-color:var(--public-green);color:var(--public-green); }
 .ticket-modal-footer-v2 a:hover { background:var(--public-green);color:#071008; }
 @keyframes ticket-backdrop-in { from { opacity:0; } }
