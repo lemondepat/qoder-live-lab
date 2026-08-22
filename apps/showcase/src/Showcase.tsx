@@ -5,7 +5,7 @@ import { useMarketFeed } from "./market-feed";
 import type { MarketIndex, MarketQuote } from "./market-data";
 import { computeMarketPulse } from "./market-pulse";
 import { derivePreviousClose, parseIndexValue } from "./kline";
-import { appendPoint, clampToSession, formatMinute, hongKongMinute, hongKongTradingDay, intradayExtremes, intradaySpan, linePath, areaPath, observationScope, percentFrom, priceLevels, runningAverage, SESSION, sessionProgress, timeLevels, tradedMinutes, TRADED_MINUTES, type IntradayPoint, type IntradaySpan } from "./intraday";
+import { anchorSeries, appendPoint, clampToSession, formatMinute, hongKongMinute, hongKongTradingDay, intradayExtremes, intradaySpan, linePath, areaPath, observationScope, percentFrom, priceLevels, runningAverage, SESSION, sessionProgress, timeLevels, tradedMinutes, TRADED_MINUTES, type IntradayPoint, type IntradaySpan } from "./intraday";
 import "./showcase.css";
 
 const POINT_LIMIT = 390;
@@ -132,8 +132,9 @@ function IntradayChart({ points, average, span, previousClose, symbol, minute, t
   const prices = priceLevels(span, 5);
   const times = timeLevels();
   const previousY = previousClose !== null ? toY(previousClose) : null;
-  const line = linePath(points, toX, toY);
-  const area = areaPath(points, toX, toY, height - padY);
+  const drawn = anchorSeries(previousClose, points);
+  const line = linePath(drawn, toX, toY);
+  const area = areaPath(drawn, toX, toY, height - padY);
   const meanLine = linePath(average, toX, toY);
   const head = points[points.length - 1];
   const headX = toX(head.minute);
