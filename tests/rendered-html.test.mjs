@@ -52,8 +52,8 @@ test("server-renders the Qoder Live Lab public board", async () => {
   assert.doesNotMatch(html, /POLICY VERIFIES/);
   assert.doesNotMatch(html, /02 \/ LIVE PIPELINE/);
   assert.match(html, /What should the market become next/);
-  assert.match(html, /Ask about this lab/i);
-  assert.match(html, /qoder-brand-icon/);
+  assert.doesNotMatch(html, /Ask about this lab/i);
+  assert.match(html, /qoder-line\.png/);
   assert.match(html, /Live Pipeline/i);
   assert.match(html, /Failed Changes/i);
   assert.doesNotMatch(html, /Change log/i);
