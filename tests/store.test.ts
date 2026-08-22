@@ -52,6 +52,15 @@ test("resets the Stage to the immutable, intentionally simple opening release", 
   assert.notEqual(board.system.previousRelease?.version, OPENING_RELEASE_VERSION);
 });
 
+test("keeps release numbers monotonic after the Stage is reset to the opening release", async () => {
+  const historical = (await getBoard()).requests
+    .map((item) => Number(item.releaseVersion?.match(/^v0\.(\d+)$/)?.[1] ?? -1));
+  const priorMaximum = Math.max(...historical);
+  const request = await createRequest({ author: "Tester", title: "Transform the canvas into a verified feature pack view", idempotencyKey: "test-idempotency-monotonic" });
+  const finished = await finishRequest(request.id, "live", { previewUrl: "https://preview-next.example.test", commitSha: "def456" });
+  assert.equal(finished?.releaseVersion, `v0.${priorMaximum + 1}`);
+});
+
 test("persists a sanitized Longbridge snapshot for the public read path", async () => {
   const timestamp = new Date().toISOString();
   await writeMarketSnapshot({
@@ -63,12 +72,13 @@ test("persists a sanitized Longbridge snapshot for the public read path", async 
     marketTimestamp: timestamp,
     sequence: 7,
     indices: [],
-    quotes: [{ symbol: "0700", vendorSymbol: "700.HK", name: "Tencent", sector: "Internet", kind: "equity", currency: "HKD", last: 448.6, prevClose: 442.4, open: 438.2, high: 450, low: 437.8, change: 6.2, changePercent: 1.4, volume: 12_441_624, turnover: 5_570_000_000, timestamp, trail: [442.4, 448.6] }],
+    quotes: [{ symbol: "0700", vendorSymbol: "700.HK", name: "Tencent", sector: "Internet", kind: "equity", currency: "HKD", last: 448.6, prevClose: 442.4, open: 438.2, high: 450, low: 437.8, change: 6.2, changePercent: 1.4, volume: 12_441_624, turnover: 5_570_000_000, timestamp, trail: [442.4, 448.6], intraday: [{ timestamp, price: 448.6, averagePrice: 446.2, volume: 1200, turnover: 537_720 }] }],
   });
   const snapshot = await getMarketSnapshot();
   assert.equal(snapshot.source, "longbridge");
   assert.equal(snapshot.sequence, 7);
   assert.equal(snapshot.quotes[0]?.last, 448.6);
+  assert.equal(snapshot.quotes[0]?.intraday[0]?.price, 448.6);
 });
 
 test("keeps a twenty-second market cadence healthy and flags missed snapshots", async () => {

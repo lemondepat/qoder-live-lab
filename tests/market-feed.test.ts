@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildSnapshot, marketSession, mergeQuote } from "../apps/runner/src/market-feed";
+import { buildSnapshot, marketSession, mergeIntraday, mergeQuote, normalizeIntraday } from "../apps/runner/src/market-feed";
 import type { MarketQuoteSnapshot } from "@qoder-live-lab/contracts";
 
 test("folds Longbridge snapshots and ticks into trusted quote facts", () => {
@@ -12,7 +12,34 @@ test("folds Longbridge snapshots and ticks into trusted quote facts", () => {
   assert.equal(quote?.last, 448.7);
   assert.equal(quote?.prevClose, 442.4);
   assert.equal(quote?.trail.at(-1), 448.7);
+  assert.deepEqual(quote?.intraday, []);
   assert.ok((quote?.changePercent ?? 0) > 1);
+});
+
+test("folds official Longbridge minute bars into the trusted quote contract", () => {
+  const quotes = new Map<string, MarketQuoteSnapshot>();
+  mergeQuote(quotes, { symbol: "HSI.HK", last_done: "26009.46", prev_close: "25849.08", timestamp: "2026-08-21T08:00:00Z" });
+  const count = mergeIntraday(quotes, "HSI.HK", [
+    { price: "25860.10", timestamp: "2026-08-21T01:31:00Z", volume: "12", turnover: "310321.2", avg_price: "25858.2" },
+    { price: "25856.51", timestamp: "2026-08-21T01:30:00Z", volume: "10", turnover: "258565.1", avg_price: "25856.51" },
+  ]);
+  const quote = quotes.get("HSI.HK");
+  assert.equal(count, 2);
+  assert.deepEqual(quote?.intraday.map((point) => point.price), [25856.51, 25860.1]);
+  assert.equal(quote?.intraday[0]?.averagePrice, 25856.51);
+  assert.deepEqual(quote?.trail, [25856.51, 25860.1]);
+});
+
+test("normalizes, deduplicates, and rejects malformed intraday facts", () => {
+  const points = normalizeIntraday([
+    { price: "0", timestamp: "2026-08-21T01:29:00Z" },
+    { price: "100", timestamp: "not-a-date" },
+    { price: "101", timestamp: "2026-08-21T01:30:00Z", volume: "4", turnover: "404" },
+    { price: "102", timestamp: "2026-08-21T01:30:00Z", volume: "5", turnover: "510" },
+  ]);
+  assert.equal(points.length, 1);
+  assert.equal(points[0]?.price, 102);
+  assert.equal(points[0]?.volume, 5);
 });
 
 test("ignores an out-of-order push instead of moving the market backwards", () => {

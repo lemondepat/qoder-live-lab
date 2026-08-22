@@ -245,9 +245,11 @@ function PipelineLane({ lane, cards, onSelect }: { lane: (typeof pipelineLanes)[
 }
 
 function RequestCard({ card, onSelect }: { card: ChangeRequest; onSelect: (id: string) => void }) {
+  const pack = REHEARSAL_FEATURES.find((feature) => feature.id === card.presetFeatureId);
   return (
     <button type="button" className={`pipeline-card-v2 status-${card.status}`} onClick={() => onSelect(card.id)} aria-haspopup="dialog">
       <span className="pipeline-card-top-v2"><span>{card.id}</span><b>{publicStatusLabel(card.status)}</b></span>
+      {pack && <span className="pipeline-pack-v2">SIGNED PACK · {pack.title.toUpperCase()}</span>}
       <strong className="pipeline-card-title-v2">{publicUiText(card.title)}</strong>
       <span className="pipeline-card-requester-v2">Requested by {card.author}</span>
       <span className="pipeline-card-footer-v2"><span>{(card.releaseVersion ?? publicUiText(card.testSummary ?? card.events.at(-1)?.message)) || "Awaiting evidence"}</span><b>↗</b></span>
@@ -266,6 +268,8 @@ function TicketDialog({ card, activeRelease, previousRelease, onClose }: { card:
   const promoted = card.status === "live" && Boolean(releaseVersion);
   const currentRelease = promoted && (activeRelease.requestId === card.id || activeRelease.version === releaseVersion);
   const stopped = ["rejected", "blocked", "failed", "cancelled"].includes(card.status);
+  const featurePack = REHEARSAL_FEATURES.find((feature) => feature.id === card.presetFeatureId);
+  const executionLabel = featurePack ? "SIGNED FEATURE PACK" : card.qcaSessionId ? "QODER CLOUD AGENT" : card.source === "ops" ? "BOUNDARY CHALLENGE" : "QUEUE";
 
   useEffect(() => { closeButtonRef.current?.focus(); }, []);
 
@@ -288,12 +292,12 @@ function TicketDialog({ card, activeRelease, previousRelease, onClose }: { card:
               <header><span>CURRENT REQUEST</span><b>{publicStatusLabel(card.status)}</b></header>
               <dl className="ticket-facts-v2">
                 <div><dt>LAST UPDATE</dt><dd>{formatTicketDate(card.updatedAt)}</dd></div>
-                <div><dt>AGENT</dt><dd>{card.qcaSessionId ? "QODER CLOUD AGENT" : card.source === "ops" ? "BOUNDARY CHALLENGE" : "QUEUE"}</dd></div>
+                <div><dt>EXECUTION</dt><dd>{executionLabel}</dd></div>
                 <div><dt>BRANCH</dt><dd>{card.branch ?? "NOT CREATED"}</dd></div>
                 <div><dt>FILES</dt><dd>{card.files?.length ?? 0} CHANGED</dd></div>
               </dl>
               <div className="ticket-timeline-v2">
-                <span>QODER CLOUD AGENT PROGRESS</span>
+                <span>{featurePack ? `SIGNED PACK PROGRESS · ${featurePack.title.toUpperCase()}` : "QODER CLOUD AGENT PROGRESS"}</span>
                 {card.events.slice(-8).map((event) => <div key={event.id}><time>{formatTicketClock(event.createdAt)}</time><i /><p><b>{event.kind.toUpperCase()}</b>{publicUiText(event.message)}</p></div>)}
                 {card.events.length === 0 && <p className="ticket-empty-v2">Awaiting the first agent event.</p>}
               </div>
