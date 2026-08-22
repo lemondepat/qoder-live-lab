@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { evaluateChanges } from "@qoder-live-lab/contracts/policy";
 import type { PolicyDecision } from "@qoder-live-lab/contracts";
-import { CANDIDATE_VERIFICATION_ARGS } from "./candidate-verification";
+import { CANDIDATE_VERIFICATION_ARGS, candidateVerificationEnvironment } from "./candidate-verification";
 import type { RunnerConfig } from "./config";
 
 const exec = promisify(execFile);
@@ -38,13 +38,14 @@ export async function inspectAndVerify(branch: string, config: RunnerConfig): Pr
   const worktree = await mkdtemp(join(tmpdir(), "qll-candidate-"));
   try {
     await git(config.repositoryPath, ["worktree", "add", "--detach", worktree, branch]);
-    await exec("npm", ["ci", "--ignore-scripts", "--prefer-offline"], { cwd: worktree, timeout: 90_000, maxBuffer: 8 * 1024 * 1024 });
+    const verificationEnvironment = candidateVerificationEnvironment();
+    await exec("npm", ["ci", "--ignore-scripts", "--prefer-offline"], { cwd: worktree, env: verificationEnvironment, timeout: 90_000, maxBuffer: 8 * 1024 * 1024 });
     try {
-      await exec("npm", [...CANDIDATE_VERIFICATION_ARGS], { cwd: worktree, timeout: 240_000, maxBuffer: 16 * 1024 * 1024 });
+      await exec("npm", [...CANDIDATE_VERIFICATION_ARGS], { cwd: worktree, env: verificationEnvironment, timeout: 240_000, maxBuffer: 16 * 1024 * 1024 });
     } catch (error) {
-      throw new Error("Candidate verification checks failed before pull request creation", { cause: error });
+      throw new Error("Candidate verification checks failed inside the isolated environment before pull request creation", { cause: error });
     }
-    return { branch, commitSha, files, diff, policy, testSummary: "Policy, tests, lint, Showcase build, and control build passed" };
+    return { branch, commitSha, files, diff, policy, testSummary: "Policy, control tests, Showcase tests, lint, Showcase build, and control build passed" };
   } finally {
     await git(config.repositoryPath, ["worktree", "remove", "--force", worktree]).catch(() => undefined);
     await rm(worktree, { recursive: true, force: true });

@@ -51,10 +51,11 @@ test("server-renders the Qoder Live Lab public board", async () => {
   assert.match(html, /QODER DEPLOYS/);
   assert.doesNotMatch(html, /POLICY VERIFIES/);
   assert.doesNotMatch(html, /02 \/ LIVE PIPELINE/);
-  assert.match(html, /What should the market become next/);
+  assert.match(html, /What should Qoder build into this dashboard next/);
   assert.doesNotMatch(html, /Ask about this lab/i);
   assert.match(html, /qoder-line\.png/);
-  assert.match(html, /Live Pipeline/i);
+  assert.match(html, /<span>02<\/span>\s*Pipeline/i);
+  assert.doesNotMatch(html, /Live Pipeline/i);
   assert.match(html, /Failed Changes/i);
   assert.doesNotMatch(html, /Change log/i);
   assert.doesNotMatch(html, /Long\s*Bridge/i);
@@ -75,7 +76,9 @@ test("server-renders stage and operator routes and folds versions into the pipel
   assert.match(stageHtml, /sandbox="allow-scripts allow-pointer-lock allow-same-origin"/i);
   assert.doesNotMatch(stageHtml, /Long\s*Bridge/i);
   assert.doesNotMatch(stageHtml, /sandbox="[^"]*(allow-forms|allow-popups|allow-top-navigation)/i);
-  assert.match(await releases.text(), /Live Pipeline/i);
+  const releasesHtml = await releases.text();
+  assert.match(releasesHtml, /<span>02<\/span>\s*Pipeline/i);
+  assert.doesNotMatch(releasesHtml, /Live Pipeline/i);
   assert.match(opsHtml, /Trusted control plane/i);
   assert.match(opsHtml, /qoder-brand-icon/i);
 });

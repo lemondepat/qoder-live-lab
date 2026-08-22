@@ -14,7 +14,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "tsx scripts/run-tests-isolated.ts",
     "test:render": "npm run build && node --test tests/rendered-html.test.mjs",
     "verify:candidate": "npm test && npm run lint && npm run build --workspace @qoder-live-lab/showcase && npm run build",
     "check": "npm run lint && npm test && npm run typecheck --workspace @qoder-live-lab/runner && npm run build && npm run build --workspace @qoder-live-lab/showcase",
