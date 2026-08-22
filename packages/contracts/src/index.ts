@@ -89,6 +89,14 @@ export const OPENING_RELEASE_REQUIREMENT = "Connect the intentionally simple can
 export type MarketFeedStatus = "live" | "delayed" | "stale" | "demo" | "offline";
 export type MarketSession = "pre-open" | "morning" | "lunch" | "afternoon" | "closing" | "closed";
 
+export type MarketIntradayPoint = {
+  timestamp: string;
+  price: number;
+  averagePrice?: number;
+  volume: number;
+  turnover: number;
+};
+
 export type MarketQuoteSnapshot = {
   symbol: string;
   vendorSymbol: string;
@@ -107,6 +115,7 @@ export type MarketQuoteSnapshot = {
   turnover: number;
   timestamp: string;
   trail: number[];
+  intraday: MarketIntradayPoint[];
 };
 
 export type MarketSnapshot = {

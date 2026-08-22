@@ -2,6 +2,7 @@ import type { ChangeRequest } from "@qoder-live-lab/contracts";
 import { loadConfig } from "./config";
 import { ControlClient } from "./control-client";
 import { failurePolicy, type RunnerPhase } from "./failure-policy";
+import { materializeFeaturePack } from "./feature-pack";
 import { createPullRequest, createReleaseTag, findPreview, inspectAndVerify, mergePullRequest, waitForChecks } from "./git-pipeline";
 import { runLocal } from "./local-provider";
 import { startMarketFeed } from "./market-feed";
@@ -40,8 +41,12 @@ async function processRequest(request: ChangeRequest, provider: "qca" | "local")
   const branch = `qll/task-${request.id.toLowerCase()}`;
   let phase: RunnerPhase = "agent";
   try {
-    await control.event(request.id, "status", `${provider === "qca" ? "Qoder Cloud" : "Local fallback"} agent assigned`, { status: "coding" });
-    if (provider === "qca") {
+    if (request.presetFeatureId) {
+      await control.event(request.id, "status", "Signed Feature Pack assigned to the trusted controller", { status: "coding", branch });
+      const activation = await materializeFeaturePack(request, branch, config);
+      await control.event(request.id, "agent", `Pre-verified pack materialized · ${activation.feature.title}`, { branch, commitSha: activation.commitSha });
+    } else if (provider === "qca") {
+      await control.event(request.id, "status", "Qoder Cloud agent assigned", { status: "coding", branch });
       if (config.dryRun) await simulateAgent(request.id);
       else {
         const result = await runQca(
@@ -55,6 +60,7 @@ async function processRequest(request: ChangeRequest, provider: "qca" | "local")
         await control.event(request.id, "status", "Cloud session completed", { qcaSessionId: result.sessionId });
       }
     } else {
+      await control.event(request.id, "status", "Local fallback agent assigned", { status: "coding", branch });
       await runLocal(request, branch, config, (message) => control.event(request.id, "agent", message));
     }
     phase = "changeset";

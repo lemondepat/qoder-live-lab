@@ -59,4 +59,7 @@ test("QCA must fix candidate-owned verification failures before pushing", () => 
   assert.match(prompt, /Before committing, run npm run verify:candidate/);
   assert.match(prompt, /fix the candidate, and rerun the full command until it passes/);
   assert.match(prompt, /Do not commit or push a candidate with failing tests, lint, or builds/);
+  assert.match(prompt, /docs\/qca\/market-data-capabilities\.md in full/);
+  assert.match(prompt, /official one-minute Longbridge intraday bars/);
+  assert.match(prompt, /never use Web Search/);
 });

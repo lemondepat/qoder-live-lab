@@ -1,26 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useMarketFeed } from "./market-feed";
 import type { MarketIndex, MarketQuote } from "./market-data";
 import { computeMarketPulse } from "./market-pulse";
-import { derivePreviousClose, parseIndexValue } from "./kline";
-import { anchorSeries, appendPoint, clampToSession, formatMinute, hongKongMinute, hongKongTradingDay, intradayExtremes, intradaySpan, linePath, areaPath, observationScope, percentFrom, priceLevels, runningAverage, SESSION, sessionProgress, timeLevels, tradedMinutes, TRADED_MINUTES, type IntradayPoint, type IntradaySpan } from "./intraday";
+import { DEFAULT_FEATURE_EDITION, isFeatureEdition, type FeatureEdition } from "./feature-pack";
+import { anchorSeries, appendPoint, clampToSession, formatMinute, hongKongMinute, hongKongTradingDay, intradayExtremes, intradaySpan, linePath, areaPath, observationScope, percentFrom, priceLevels, runningAverage, SESSION, sessionProgress, timeLevels, tradedMinutes, TRADED_MINUTES, trustedIntradaySeries, type IntradayPoint, type IntradaySpan } from "./intraday";
 import "./showcase.css";
 
 const POINT_LIMIT = 390;
 
-type Edition = "baseline" | "sector-heatmap" | "momentum-lens" | "market-command";
-
 export function Showcase() {
-  const [edition, setEdition] = useState<Edition>("baseline");
+  const [edition, setEdition] = useState<FeatureEdition>(DEFAULT_FEATURE_EDITION);
   const [clock, setClock] = useState("13:42:08");
   const market = useMarketFeed();
 
   useEffect(() => {
-    const selected = new URLSearchParams(window.location.search).get("edition") as Edition | null;
+    const selected = new URLSearchParams(window.location.search).get("edition");
     const kickoff = window.setTimeout(() => {
-      if (selected && ["sector-heatmap", "momentum-lens", "market-command"].includes(selected)) setEdition(selected);
+      if (isFeatureEdition(selected)) setEdition(selected);
     }, 0);
     const timer = window.setInterval(() => {
       setClock(new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false, timeZone: "Asia/Hong_Kong" }).format(new Date()));
@@ -33,6 +31,7 @@ export function Showcase() {
   const feedTitle = market.status === "live" && market.session === "closed" ? "MARKET CLOSED · LIVE FEED" : market.status === "live" ? "LIVE MARKET FEED" : market.status === "stale" ? "STALE · LAST GOOD TICK" : market.status === "delayed" ? "DELAYED MARKET FEED" : "DEMO · AWAITING LIVE FEED";
   const feedDetail = market.source === "longbridge" ? `${market.session.toUpperCase()} · SEQ ${market.sequence}` : "Trusted data plane ready";
   const sessionLabel = market.session === "closed" ? "MARKET CLOSED" : `${market.session.toUpperCase()} SESSION`;
+  const showIntraday = edition === "baseline";
 
   return (
     <main className={`market-shell edition-${edition}`}>
@@ -44,9 +43,9 @@ export function Showcase() {
       <section className="index-row">
         {market.indices.map((index) => <article key={`${index.symbol}-${market.sequence}`}><div><span>{index.symbol}</span><small>{index.label}</small></div><strong>{index.value}</strong><b className={index.change >= 0 ? "up" : "down"}>{index.change >= 0 ? "+" : ""}{index.change.toFixed(2)}%</b></article>)}
       </section>
-      <IntradayPanel indices={market.indices} sequence={market.sequence} sessionLabel={sessionLabel} session={market.session} marketTimestamp={market.marketTimestamp} status={market.status} source={market.source} />
+      {showIntraday && <IntradayPanel indices={market.indices} sequence={market.sequence} sessionLabel={sessionLabel} session={market.session} marketTimestamp={market.marketTimestamp} status={market.status} source={market.source} />}
       <MarketPulseStrip quotes={quotes} />
-      {edition === "baseline" ? <BaselineTable quotes={quotes} /> : <EnhancedMarket quotes={quotes} edition={edition} />}
+      {edition === "baseline" ? <BaselineTable quotes={quotes} /> : <EnhancedMarket quotes={quotes} edition={edition} clock={clock} session={market.session} />}
       <footer className="market-footer"><span>DISPLAY ONLY · NOT INVESTMENT ADVICE</span><span>{market.source === "longbridge" ? "VERIFIED MARKET DATA" : advanced ? `FEATURE EDITION / ${edition.toUpperCase()}` : "BASELINE RELEASE / INTENTIONALLY SIMPLE"}</span></footer>
     </main>
   );
@@ -58,26 +57,29 @@ function IntradayPanel({ indices, sequence, sessionLabel, session, marketTimesta
   const [focus, setFocus] = useState("HSI");
   const active = indices.find((index) => index.symbol === focus) ?? indices[0] ?? null;
   const activeSymbol = active?.symbol ?? focus;
-  const observed = parseIndexValue(active?.value ?? "");
+  const observed = active?.last ?? null;
   const stamped = new Date(marketTimestamp);
   const instant = Number.isNaN(stamped.getTime()) ? new Date() : stamped;
   const tradingDay = hongKongTradingDay(instant);
   const minute = clampToSession(hongKongMinute(instant));
   const scope = observationScope(source, tradingDay, activeSymbol);
+  const providerPoints = trustedIntradaySeries(active?.intraday ?? [], tradingDay);
+  const hasOfficialMinutes = providerPoints.length > 0;
 
   useEffect(() => {
-    if (observed === null) return;
+    if (observed === null || hasOfficialMinutes) return;
     const key = `${scope}:${sequence}:${observed}`;
     const entry = tickTrack.get(scope);
     if (entry?.key === key) return;
     tickTrack.set(scope, { key, points: appendPoint(entry?.points ?? [], { minute, value: observed }, POINT_LIMIT) });
-  }, [scope, observed, sequence, minute]);
+  }, [scope, observed, sequence, minute, hasOfficialMinutes]);
 
   const tracked = tickTrack.get(scope);
-  const points = observed === null || tracked?.key === `${scope}:${sequence}:${observed}`
+  const observedPoints = observed === null || tracked?.key === `${scope}:${sequence}:${observed}`
     ? tracked?.points ?? []
     : appendPoint(tracked?.points ?? [], { minute, value: observed }, POINT_LIMIT);
-  const previousClose = derivePreviousClose(observed, active?.change ?? 0);
+  const points = hasOfficialMinutes ? providerPoints : observedPoints;
+  const previousClose = active?.previousClose ?? null;
   const span = intradaySpan(points, [previousClose]);
   const average = runningAverage(points);
   const extremes = intradayExtremes(points);
@@ -90,7 +92,7 @@ function IntradayPanel({ indices, sequence, sessionLabel, session, marketTimesta
   return <section className={`intraday-panel tone-${tone}`} aria-label={`${activeSymbol} one day intraday chart`}>
     <div className="intraday-head">
       <div className="intraday-title">
-        <span>INTRADAY · 1 DAY · LIVE LINE FROM OBSERVED TICKS</span>
+        <span>INTRADAY · 1 DAY · {hasOfficialMinutes ? "OFFICIAL MINUTE BARS" : "LIVE LINE FROM OBSERVED TICKS"}</span>
         <h2>{activeSymbol} <small>{active?.label ?? ""}</small></h2>
       </div>
       <div className="intraday-switch" role="group" aria-label="Select index">
@@ -114,7 +116,7 @@ function IntradayPanel({ indices, sequence, sessionLabel, session, marketTimesta
     </div>
     <div className="intraday-foot">
       <span>{closed ? `${sessionLabel} · LAST TRADING DAY` : sessionLabel} · 09:30–16:00 HKT · LUNCH 12:00–13:00 COMPRESSED</span>
-      <span>{points.length} INTRADAY POINT{points.length === 1 ? "" : "S"} · VWAP-STYLE AVERAGE OVER OBSERVED TICKS</span>
+      <span>{points.length} {hasOfficialMinutes ? "OFFICIAL MINUTE BAR" : "INTRADAY POINT"}{points.length === 1 ? "" : "S"} · RUNNING PRICE AVERAGE</span>
       <span>DERIVED VIEW · DISPLAY ONLY</span>
     </div>
   </section>;
@@ -203,12 +205,56 @@ function BaselineTable({ quotes }: { quotes: MarketQuote[] }) {
   return <section className="baseline-panel"><div className="baseline-title"><div><div className="watchlist-row"><span>WATCHLIST / {quotes.length}</span><ul className="tone-legend" aria-label="Change color legend"><li className="gain"><i />GAIN</li><li className="loss"><i />LOSS</li><li className="flat"><i />FLAT</li></ul></div><h1>Hong Kong<br />market monitor</h1></div><p>This baseline is intentionally simple.<br />Ask Qoder to make it useful.</p></div><div className="plain-table"><div className="table-head"><span>NAME</span><span>LAST</span><span>CHANGE</span><span>VOLUME</span></div>{quotes.map((quote) => <div className="table-row quote-tick" key={`${quote.symbol}-${quote.timestamp || "demo"}`}><span><b>{quote.symbol}</b>{quote.name}</span><strong>{quote.price.toFixed(2)}</strong><b className={quote.change >= 0 ? "up" : "down"}>{quote.change >= 0 ? "+" : ""}{quote.change.toFixed(2)}%</b><span>{quote.volume}</span></div>)}</div></section>;
 }
 
-function EnhancedMarket({ quotes, edition }: { quotes: MarketQuote[]; edition: Exclude<Edition, "baseline"> }) {
+function EnhancedMarket({ quotes, edition, clock, session }: { quotes: MarketQuote[]; edition: Exclude<FeatureEdition, "baseline">; clock: string; session: string }) {
+  if (edition === "volatility-storm") return <VolatilityStorm quotes={quotes} />;
+  if (edition === "closing-bell") return <ClosingBell quotes={quotes} clock={clock} session={session} />;
+  const pulse = computeMarketPulse(quotes);
   return <section className="enhanced-panel">
-    <div className="enhanced-head"><div><span>MARKET TRANSFORMED</span><h1>{edition === "sector-heatmap" ? "Sector heatmap" : edition === "momentum-lens" ? "Momentum lens" : "Market command"}</h1></div>{edition === "market-command" && <div className="breadth"><span>MARKET BREADTH</span><strong>392 <i>UP</i> / 211 DOWN</strong></div>}</div>
+    <div className="enhanced-head"><div><span>MARKET TRANSFORMED</span><h1>{edition === "sector-heatmap" ? "Sector heatmap" : edition === "momentum-lens" ? "Momentum lens" : "Market command"}</h1></div>{edition === "market-command" && <div className="breadth"><span>WATCHLIST BREADTH</span><strong>{pulse.advancers} <i>UP</i> / {pulse.decliners} DOWN</strong></div>}</div>
     <div className="market-grid">{quotes.map((quote) => <MarketTile key={`${quote.symbol}-${quote.timestamp || "demo"}`} quote={quote} showTrail={edition !== "sector-heatmap"} />)}</div>
     {edition === "market-command" && <div className="activity-tape"><b>LIVE ACTIVITY</b>{quotes.map((quote) => <span key={quote.symbol}>{quote.symbol} <i className={quote.change >= 0 ? "up" : "down"}>{quote.change >= 0 ? "▲" : "▼"} {Math.abs(quote.change).toFixed(2)}%</i></span>)}</div>}
   </section>;
+}
+
+function VolatilityStorm({ quotes }: { quotes: MarketQuote[] }) {
+  const ranked = [...quotes].sort((left, right) => Math.abs(right.change) - Math.abs(left.change));
+  const strongest = ranked[0];
+  const dispersion = quotes.length ? quotes.reduce((sum, quote) => sum + Math.abs(quote.change), 0) / quotes.length : 0;
+  const intensity = Math.min(100, Math.max(12, dispersion * 24));
+  return <section className="volatility-panel" style={{ "--storm-intensity": `${intensity}%` } as CSSProperties}>
+    <div className="storm-copy"><span>LIVE DISPERSION ENGINE</span><h1>Volatility<br /><em>storm</em></h1><p>Every orbit is driven by the watchlist&apos;s real percentage moves. The atmosphere intensifies as dispersion rises.</p><dl><div><dt>MEAN ABS MOVE</dt><dd>{dispersion.toFixed(2)}%</dd></div><div><dt>STRONGEST CELL</dt><dd>{strongest ? `${strongest.symbol} · ${signedPercent(strongest.change)}` : "—"}</dd></div><div><dt>LIVE CELLS</dt><dd>{quotes.length}</dd></div></dl></div>
+    <div className="storm-radar" role="img" aria-label={`Volatility field with ${dispersion.toFixed(2)} percent mean absolute move`}>
+      <i className="storm-orbit orbit-one" /><i className="storm-orbit orbit-two" /><i className="storm-orbit orbit-three" />
+      <div className="storm-core"><small>DISPERSION</small><strong>{dispersion.toFixed(2)}</strong><span>% MEAN MOVE</span></div>
+      {ranked.slice(0, 6).map((quote, index) => <article key={quote.symbol} className={quote.change >= 0 ? "positive" : "negative"} style={{ "--storm-index": index } as CSSProperties}><b>{quote.symbol}</b><span>{signedPercent(quote.change)}</span></article>)}
+    </div>
+  </section>;
+}
+
+function ClosingBell({ quotes, clock, session }: { quotes: MarketQuote[]; clock: string; session: string }) {
+  const pulse = computeMarketPulse(quotes);
+  const countdown = closingCountdown(clock);
+  return <section className="closing-panel">
+    <div className="closing-glow" aria-hidden="true" />
+    <div className="closing-kicker"><span>{session === "closed" ? "SESSION COMPLETE" : "COUNTDOWN TO 16:00 HKT"}</span><i>{session.toUpperCase()}</i></div>
+    <div className="closing-clock"><small>CLOSING BELL</small><strong>{session === "closed" ? "CLOSED" : countdown}</strong><span>{clock} HKT · LIVE</span></div>
+    <div className="closing-spotlights">
+      <article className="leader"><small>SESSION LEADER</small><b>{pulse.leader?.symbol ?? "—"}</b><strong>{pulse.leader ? signedPercent(pulse.leader.change) : "—"}</strong><span>{pulse.leader?.name ?? "Awaiting market facts"}</span></article>
+      <article className="breadth-card"><small>WATCHLIST BREADTH</small><b>{pulse.advancerShare}%</b><strong>{pulse.advancers} ADVANCING · {pulse.decliners} DECLINING</strong><span>Derived from {pulse.total} trusted live quotes</span></article>
+      <article className="laggard"><small>SESSION LAGGARD</small><b>{pulse.laggard?.symbol ?? "—"}</b><strong>{pulse.laggard ? signedPercent(pulse.laggard.change) : "—"}</strong><span>{pulse.laggard?.name ?? "Awaiting market facts"}</span></article>
+    </div>
+    <div className="closing-ticker"><div>{[...quotes, ...quotes].map((quote, index) => <span key={`${quote.symbol}-${index}`}>{quote.symbol} <i className={quote.change >= 0 ? "up" : "down"}>{signedPercent(quote.change)}</i></span>)}</div></div>
+  </section>;
+}
+
+function closingCountdown(clock: string) {
+  const [hours, minutes, seconds] = clock.split(":").map(Number);
+  const remaining = Math.max(0, 16 * 3600 - (hours * 3600 + minutes * 60 + seconds));
+  return [Math.floor(remaining / 3600), Math.floor((remaining % 3600) / 60), remaining % 60].map((value) => String(value).padStart(2, "0")).join(":");
+}
+
+function signedPercent(value: number) {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
 }
 
 function MarketTile({ quote, showTrail }: { quote: MarketQuote; showTrail: boolean }) {

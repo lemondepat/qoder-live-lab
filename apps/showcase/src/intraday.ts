@@ -1,6 +1,7 @@
 export type IntradayPoint = { minute: number; value: number };
 export type IntradaySpan = { low: number; high: number; span: number };
 export type IntradayExtremes = { high: number; low: number; highMinute: number; lowMinute: number };
+export type TimestampedPrice = { timestamp: string; price: number };
 
 /** Hong Kong cash session in minutes from midnight HKT. */
 export const SESSION = { open: 9 * 60 + 30, lunchStart: 12 * 60, lunchEnd: 13 * 60, close: 16 * 60 };
@@ -63,6 +64,26 @@ export function appendPoint(points: IntradayPoint[], point: IntradayPoint, limit
   const last = points[points.length - 1];
   const next = last && last.minute === point.minute ? [...points.slice(0, -1), point] : [...points, point];
   return next.length > size ? next.slice(next.length - size) : next;
+}
+
+/**
+ * Converts trusted provider minute bars into the chart timeline. Malformed,
+ * out-of-session, and cross-day facts are discarded; duplicate minutes keep
+ * the latest provider value.
+ */
+export function trustedIntradaySeries(points: TimestampedPrice[], tradingDay?: string): IntradayPoint[] {
+  const byMinute = new Map<number, IntradayPoint>();
+  for (const point of points) {
+    const instant = new Date(point.timestamp);
+    if (Number.isNaN(instant.getTime()) || !Number.isFinite(point.price) || point.price <= 0) continue;
+    if (tradingDay && hongKongTradingDay(instant) !== tradingDay) continue;
+    const minute = hongKongMinute(instant);
+    const inMorning = minute >= SESSION.open && minute <= SESSION.lunchStart;
+    const inAfternoon = minute >= SESSION.lunchEnd && minute <= SESSION.close;
+    if (!inMorning && !inAfternoon) continue;
+    byMinute.set(minute, { minute, value: point.price });
+  }
+  return [...byMinute.values()].sort((left, right) => left.minute - right.minute);
 }
 
 /**

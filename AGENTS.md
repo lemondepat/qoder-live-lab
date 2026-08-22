@@ -21,4 +21,6 @@ Within that canvas, a candidate may make a dramatic product-level transformation
 
 Use only market facts returned by the trusted `useMarketFeed()` hook. Derived visualizations such as breadth, ranking, normalized sparklines, heatmaps, and relative comparisons are allowed. Never replace live values with literals or simulated motion.
 
+Before designing or editing a candidate, read `docs/qca/market-data-capabilities.md` in full. It is the authoritative, repository-pinned contract for the market fields already available to the canvas, including official one-minute intraday bars. Do not guess provider methods, call Longbridge directly, or search for a different API.
+
 Use only the existing dependencies. Prefer one coherent, high-impact transformation over a tiny decorative change. Run the showcase build and tests. Work on the assigned `qll/task-*` branch and stop with `DECLINED` when a request is outside the allowed market canvas boundary.

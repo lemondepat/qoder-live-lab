@@ -233,6 +233,7 @@ html:has(.public-v2),body:has(.public-v2) { height:100%;overflow:hidden;overscro
 .pipeline-card-v2.status-blocked,.pipeline-card-v2.status-rejected,.pipeline-card-v2.status-failed,.pipeline-card-v2.status-cancelled { border-top-color:#ff704d;background:linear-gradient(145deg,rgba(255,112,77,.07),#141512 52%); }
 .pipeline-card-top-v2 { display:flex;justify-content:space-between;gap:10px;color:#72766f;font:800 7px monospace;letter-spacing:.07em; }
 .pipeline-card-top-v2 b { color:#a4a89f; }
+.pipeline-pack-v2 { display:inline-flex;margin-top:10px;padding:4px 6px;border:1px solid rgba(32,228,107,.35);border-radius:4px;background:rgba(32,228,107,.07);color:var(--public-green);font:800 7px monospace;letter-spacing:.07em; }
 .pipeline-card-v2.status-blocked .pipeline-card-top-v2 b,.pipeline-card-v2.status-rejected .pipeline-card-top-v2 b,.pipeline-card-v2.status-failed .pipeline-card-top-v2 b,.pipeline-card-v2.status-cancelled .pipeline-card-top-v2 b { color:#ff8a65; }
 .pipeline-card-title-v2 { display:block;margin:16px 0 8px;font:650 14px/1.25 var(--q-brand);letter-spacing:-.01em; }
 .pipeline-card-requester-v2 { display:block;margin:0;color:#7e827a;font-size:10px; }

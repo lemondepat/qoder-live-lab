@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { anchorSeries, appendPoint, areaPath, clampToSession, formatMinute, hongKongMinute, hongKongTradingDay, intradayExtremes, intradaySpan, linePath, observationScope, percentFrom, priceLevels, runningAverage, SESSION, sessionProgress, timeLevels, tradedMinutes, TRADED_MINUTES } from "../src/intraday";
+import { anchorSeries, appendPoint, areaPath, clampToSession, formatMinute, hongKongMinute, hongKongTradingDay, intradayExtremes, intradaySpan, linePath, observationScope, percentFrom, priceLevels, runningAverage, SESSION, sessionProgress, timeLevels, tradedMinutes, TRADED_MINUTES, trustedIntradaySeries } from "../src/intraday";
 
 test("compresses the lunch break out of the traded timeline", () => {
   assert.equal(TRADED_MINUTES, 330);
@@ -52,6 +52,21 @@ test("keeps one intraday point per minute and bounds the tail", () => {
   const next = appendPoint(same, { minute: 571, value: 102 }, 2);
   assert.deepEqual(next, [{ minute: 570, value: 101 }, { minute: 571, value: 102 }]);
   assert.deepEqual(appendPoint(next, { minute: 572, value: 103 }, 2), [{ minute: 571, value: 102 }, { minute: 572, value: 103 }]);
+});
+
+test("maps official timestamped minute bars onto one trusted Hong Kong session", () => {
+  const points = trustedIntradaySeries([
+    { timestamp: "2026-08-21T01:31:00Z", price: 101 },
+    { timestamp: "2026-08-21T01:30:00Z", price: 100 },
+    { timestamp: "2026-08-21T01:30:45Z", price: 100.5 },
+    { timestamp: "2026-08-21T04:30:00Z", price: 999 },
+    { timestamp: "2026-08-20T01:30:00Z", price: 80 },
+    { timestamp: "invalid", price: 120 },
+  ], "2026-08-21");
+  assert.deepEqual(points, [
+    { minute: SESSION.open, value: 100.5 },
+    { minute: SESSION.open + 1, value: 101 },
+  ]);
 });
 
 test("pads the vertical domain around observed points and reference levels", () => {

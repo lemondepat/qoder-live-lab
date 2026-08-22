@@ -338,8 +338,11 @@ export async function finishRequest(id: string, status: Extract<RequestStatus, "
   const system = await readSystem();
   const nextSystem: SystemState = { ...system, activeRequestId: undefined, runnerLastSeenAt: completedAt };
   if (request && status === "live" && request.previewUrl) {
-    const currentNumber = Number(system.activeRelease.version.replace(/\D/g, "")) || 0;
-    const releaseVersion = request.releaseVersion || `v0.${currentNumber + 1}`;
+    const releaseNumbers = (await readRequests())
+      .map((item) => releaseNumber(item.releaseVersion))
+      .filter((value): value is number => value !== undefined);
+    const highestNumber = Math.max(releaseNumber(system.activeRelease.version) ?? 0, ...releaseNumbers);
+    const releaseVersion = request.releaseVersion || `v0.${highestNumber + 1}`;
     const liveRequest = await updateRequest(id, { releaseVersion });
     nextSystem.previousRelease = system.activeRelease;
     nextSystem.activeRelease = { version: releaseVersion, requestId: id, requirement: request.title, previewUrl: request.previewUrl, commitSha: request.commitSha, activatedAt: completedAt, healthy: true };
@@ -347,6 +350,11 @@ export async function finishRequest(id: string, status: Extract<RequestStatus, "
   }
   await writeSystem(nextSystem);
   return request;
+}
+
+function releaseNumber(version?: string) {
+  const match = version?.match(/^v0\.(\d+)$/);
+  return match ? Number(match[1]) : undefined;
 }
 
 export async function createBoundaryChallenge(title: string) {
@@ -464,6 +472,7 @@ function demoQuote(
     turnover: volume * last,
     timestamp: now(),
     trail: [prevClose, prevClose * 1.002, last * 0.998, last],
+    intraday: [],
   };
 }
 

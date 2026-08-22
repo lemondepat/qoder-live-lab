@@ -3,6 +3,14 @@ import { z } from "zod";
 import { jsonError, runnerAuthorized } from "@/lib/api";
 import { writeMarketSnapshot } from "@/lib/store";
 
+const intradayPointSchema = z.object({
+  timestamp: z.string().datetime(),
+  price: z.number().finite().positive(),
+  averagePrice: z.number().finite().positive().optional(),
+  volume: z.number().finite().nonnegative(),
+  turnover: z.number().finite().nonnegative(),
+});
+
 const quoteSchema = z.object({
   symbol: z.string().min(1).max(16),
   vendorSymbol: z.string().min(3).max(24),
@@ -21,6 +29,7 @@ const quoteSchema = z.object({
   turnover: z.number().finite().nonnegative(),
   timestamp: z.string().datetime(),
   trail: z.array(z.number().finite().nonnegative()).min(1).max(120),
+  intraday: z.array(intradayPointSchema).max(420),
 });
 
 const snapshotSchema = z.object({

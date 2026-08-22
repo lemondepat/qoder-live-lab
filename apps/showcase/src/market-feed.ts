@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MARKET_INDICES, MARKET_QUOTES, type MarketIndex, type MarketQuote } from "./market-data";
+import { MARKET_INDICES, MARKET_QUOTES, type MarketIndex, type MarketIntradayPoint, type MarketQuote } from "./market-data";
 
 type FeedStatus = "live" | "delayed" | "stale" | "demo" | "offline";
 type FeedMeta = {
@@ -18,6 +18,7 @@ type ApiQuote = {
   name: string;
   sector: string;
   last: number;
+  prevClose: number;
   changePercent: number;
   volume: number;
   open: number;
@@ -25,6 +26,7 @@ type ApiQuote = {
   low: number;
   timestamp: string;
   trail: number[];
+  intraday: MarketIntradayPoint[];
 };
 type ApiSnapshot = FeedMeta & { indices: ApiQuote[]; quotes: ApiQuote[] };
 export type MarketFeedView = FeedMeta & { indices: MarketIndex[]; quotes: MarketQuote[] };
@@ -80,12 +82,21 @@ function toView(snapshot: ApiSnapshot): MarketFeedView {
     receivedAt: snapshot.receivedAt,
     marketTimestamp: snapshot.marketTimestamp,
     sequence: snapshot.sequence,
-    indices: snapshot.source === "longbridge" ? snapshot.indices.map((quote) => ({ symbol: quote.symbol, label: quote.name, value: formatPrice(quote.last), change: quote.changePercent })) : MARKET_INDICES,
+    indices: snapshot.source === "longbridge" ? snapshot.indices.map((quote) => ({
+      symbol: quote.symbol,
+      label: quote.name,
+      value: formatPrice(quote.last),
+      last: quote.last,
+      previousClose: quote.prevClose,
+      change: quote.changePercent,
+      intraday: quote.intraday ?? [],
+    })) : MARKET_INDICES,
     quotes: snapshot.source === "longbridge" ? snapshot.quotes.map((quote) => ({
         symbol: quote.symbol,
         name: quote.name,
         sector: quote.sector,
         price: quote.last,
+        previousClose: quote.prevClose,
         change: quote.changePercent,
         volume: compactNumber(quote.volume),
         trail: quote.trail.length > 1 ? quote.trail : [quote.open, quote.last],
@@ -93,6 +104,7 @@ function toView(snapshot: ApiSnapshot): MarketFeedView {
         high: quote.high,
         low: quote.low,
         timestamp: quote.timestamp,
+        intraday: quote.intraday ?? [],
       })) : MARKET_QUOTES,
   };
 }

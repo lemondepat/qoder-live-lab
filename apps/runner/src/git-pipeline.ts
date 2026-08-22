@@ -27,7 +27,7 @@ export async function inspectAndVerify(branch: string, config: RunnerConfig): Pr
     const files = ["apps/showcase/src/Showcase.tsx", "apps/showcase/src/showcase.css"];
     return { branch, commitSha: "dry-run-candidate", files, diff: "+ bounded visual change", policy: evaluateChanges(files, "+ bounded visual change"), testSummary: "Dry-run policy and candidate verification simulation passed" };
   }
-  await git(config.repositoryPath, ["fetch", "origin", `${branch}:${branch}`]);
+  await git(config.repositoryPath, ["fetch", "origin", `${config.githubDefaultBranch}:refs/remotes/origin/${config.githubDefaultBranch}`, `${branch}:${branch}`]);
   const commitSha = (await git(config.repositoryPath, ["rev-parse", branch])).trim();
   const base = `origin/${config.githubDefaultBranch}`;
   const files = splitLines(await git(config.repositoryPath, ["diff", "--name-only", `${base}...${branch}`]));

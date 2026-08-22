@@ -1,14 +1,15 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface } from "node:readline";
-import type { MarketQuoteSnapshot, MarketSession, MarketSnapshot } from "@qoder-live-lab/contracts";
+import type { MarketIntradayPoint, MarketQuoteSnapshot, MarketSession, MarketSnapshot } from "@qoder-live-lab/contracts";
 import type { RunnerConfig } from "./config";
 
 type Instrument = Pick<MarketQuoteSnapshot, "symbol" | "vendorSymbol" | "name" | "sector" | "kind" | "currency">;
 type RawQuote = Record<string, unknown> & { symbol?: string };
+type RawIntradayPoint = Record<string, unknown> & { timestamp?: unknown; price?: unknown };
 type RpcMessage = {
   id?: number;
   method?: string;
-  result?: { quotes?: RawQuote[] };
+  result?: { quotes?: RawQuote[] } | RawIntradayPoint[];
   params?: RawQuote;
   error?: { code?: number; message?: string };
 };
@@ -42,7 +43,7 @@ export function startMarketFeed(
       try {
         child = spawn(config.longbridgeBinary, ["serve"], { stdio: "pipe" });
         onStatus("Market feed · connecting to Longbridge OpenAPI");
-        await runSession(child, config.marketPublishMs, publish, onStatus, () => stopped);
+        await runSession(child, config.marketPublishMs, config.marketIntradayRefreshMs, publish, onStatus, () => stopped);
         backoffMs = 2_000;
       } catch (error) {
         if (!stopped) {
@@ -66,6 +67,7 @@ export function startMarketFeed(
 async function runSession(
   child: ChildProcessWithoutNullStreams,
   publishMs: number,
+  intradayRefreshMs: number,
   publish: (snapshot: MarketSnapshot) => Promise<void>,
   onStatus: (message: string) => void,
   isStopped: () => boolean,
@@ -73,11 +75,14 @@ async function runSession(
   const quotes = new Map<string, MarketQuoteSnapshot>();
   let sequence = 0;
   let publishTimer: NodeJS.Timeout | undefined;
+  let intradayTimer: NodeJS.Timeout | undefined;
   let publishing = Promise.resolve();
   let connected = false;
   let lastPublishedAt = 0;
   const cadenceMs = Number.isFinite(publishMs) ? Math.max(250, publishMs) : 20_000;
   const reader = createInterface({ input: child.stdout });
+  const intradayRequests = new Map<number, string>();
+  let nextRpcId = 100;
 
   const queuePublish = (immediate = false) => {
     if (publishTimer) return;
@@ -100,6 +105,15 @@ async function runSession(
   const heartbeat = setInterval(() => queuePublish(), Math.max(5_000, cadenceMs));
   const startup = setTimeout(() => child.kill("SIGTERM"), 15_000);
 
+  const requestIntraday = () => {
+    if (isStopped() || !child.stdin.writable) return;
+    for (const instrument of MARKET_INSTRUMENTS) {
+      const id = nextRpcId++;
+      intradayRequests.set(id, instrument.vendorSymbol);
+      child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method: "quote.intraday", params: { symbol: instrument.vendorSymbol, trade_session: "intraday" } })}\n`);
+    }
+  };
+
   child.stderr.on("data", (chunk) => {
     const message = String(chunk).trim();
     if (message) onStatus(`Longbridge · ${message.replace(/\s+/g, " ").slice(0, 180)}`);
@@ -112,6 +126,12 @@ async function runSession(
       let message: RpcMessage;
       try { message = JSON.parse(line) as RpcMessage; } catch { return; }
       if (message.error) {
+        const intradaySymbol = message.id === undefined ? undefined : intradayRequests.get(message.id);
+        if (intradaySymbol) {
+          intradayRequests.delete(message.id!);
+          onStatus(`Longbridge intraday unavailable for ${intradaySymbol} · ${message.error.message ?? "request failed"}`);
+          return;
+        }
         reject(new Error(`Longbridge ${message.error.code ?? "error"}: ${message.error.message ?? "request failed"}`));
         child.kill("SIGTERM");
         return;
@@ -119,9 +139,21 @@ async function runSession(
       if (message.id === 1) {
         clearTimeout(startup);
         connected = true;
-        for (const raw of message.result?.quotes ?? []) mergeQuote(quotes, raw);
+        const initial = !Array.isArray(message.result) ? message.result?.quotes ?? [] : [];
+        for (const raw of initial) mergeQuote(quotes, raw);
         onStatus(`Market feed · subscribed to ${quotes.size || MARKET_INSTRUMENTS.length} Hong Kong instruments`);
+        requestIntraday();
+        const refreshMs = Number.isFinite(intradayRefreshMs) ? Math.max(30_000, intradayRefreshMs) : 60_000;
+        intradayTimer = setInterval(requestIntraday, refreshMs);
         queuePublish(true);
+        return;
+      }
+      const intradaySymbol = message.id === undefined ? undefined : intradayRequests.get(message.id);
+      if (intradaySymbol) {
+        intradayRequests.delete(message.id!);
+        const count = mergeIntraday(quotes, intradaySymbol, Array.isArray(message.result) ? message.result : []);
+        if (count && intradayRequests.size === 0) onStatus(`Market feed · official minute history ready · ${count} latest points`);
+        queuePublish();
         return;
       }
       if (message.method === "quote.updated" && message.params) {
@@ -132,6 +164,7 @@ async function runSession(
     child.once("error", (error) => reject(error));
     child.once("exit", (code, signal) => {
       clearInterval(heartbeat);
+      if (intradayTimer) clearInterval(intradayTimer);
       clearTimeout(startup);
       if (publishTimer) clearTimeout(publishTimer);
       reader.close();
@@ -169,7 +202,41 @@ export function mergeQuote(quotes: Map<string, MarketQuoteSnapshot>, raw: RawQuo
     turnover: numberValue(raw.turnover, previous?.turnover ?? 0),
     timestamp,
     trail: trail.slice(-40),
+    intraday: previous?.intraday ?? [],
   });
+}
+
+export function mergeIntraday(quotes: Map<string, MarketQuoteSnapshot>, vendorSymbol: string, rawPoints: RawIntradayPoint[]) {
+  const quote = quotes.get(vendorSymbol);
+  if (!quote) return 0;
+  const intraday = normalizeIntraday(rawPoints);
+  if (!intraday.length) return 0;
+  quotes.set(vendorSymbol, {
+    ...quote,
+    intraday,
+    trail: intraday.slice(-40).map((point) => point.price),
+  });
+  return intraday.length;
+}
+
+export function normalizeIntraday(rawPoints: RawIntradayPoint[]): MarketIntradayPoint[] {
+  const points = new Map<string, MarketIntradayPoint>();
+  for (const raw of rawPoints) {
+    const timestamp = validTimestamp(raw.timestamp);
+    const price = positiveNumber(raw.price);
+    if (!timestamp || price === undefined) continue;
+    const averagePrice = positiveNumber(raw.avg_price);
+    points.set(timestamp, {
+      timestamp,
+      price,
+      ...(averagePrice === undefined ? {} : { averagePrice }),
+      volume: numberValue(raw.volume, 0),
+      turnover: numberValue(raw.turnover, 0),
+    });
+  }
+  return [...points.values()]
+    .sort((left, right) => left.timestamp.localeCompare(right.timestamp))
+    .slice(-390);
 }
 
 export function buildSnapshot(values: MarketQuoteSnapshot[], sequence: number, current = new Date()): MarketSnapshot {
@@ -218,6 +285,17 @@ function initialTrail(raw: RawQuote, prevClose: number, last: number) {
 function numberValue(value: unknown, fallback: number) {
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function positiveNumber(value: unknown) {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function validTimestamp(value: unknown) {
+  if (typeof value !== "string" && typeof value !== "number") return undefined;
+  const date = typeof value === "number" ? new Date(value > 10_000_000_000 ? value : value * 1000) : new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
 function timestampValue(value: unknown, fallback?: string) {
