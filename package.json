@@ -16,6 +16,7 @@
     "start": "next start",
     "test": "tsx --test tests/*.test.ts",
     "test:render": "npm run build && node --test tests/rendered-html.test.mjs",
+    "verify:candidate": "npm test && npm run lint && npm run build --workspace @qoder-live-lab/showcase && npm run build",
     "check": "npm run lint && npm test && npm run typecheck --workspace @qoder-live-lab/runner && npm run build && npm run build --workspace @qoder-live-lab/showcase",
     "policy:changeset": "tsx scripts/check-candidate.ts",
     "github:bootstrap": "node scripts/bootstrap-github.mjs",

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { evaluateChanges } from "@qoder-live-lab/contracts/policy";
 import type { PolicyDecision } from "@qoder-live-lab/contracts";
+import { CANDIDATE_VERIFICATION_ARGS } from "./candidate-verification";
 import type { RunnerConfig } from "./config";
 
 const exec = promisify(execFile);
@@ -24,7 +25,7 @@ type FetchRetryOptions = {
 export async function inspectAndVerify(branch: string, config: RunnerConfig): Promise<Candidate> {
   if (config.dryRun) {
     const files = ["apps/showcase/src/Showcase.tsx", "apps/showcase/src/showcase.css"];
-    return { branch, commitSha: "dry-run-candidate", files, diff: "+ bounded visual change", policy: evaluateChanges(files, "+ bounded visual change"), testSummary: "Dry-run policy and build simulation passed" };
+    return { branch, commitSha: "dry-run-candidate", files, diff: "+ bounded visual change", policy: evaluateChanges(files, "+ bounded visual change"), testSummary: "Dry-run policy and candidate verification simulation passed" };
   }
   await git(config.repositoryPath, ["fetch", "origin", `${branch}:${branch}`]);
   const commitSha = (await git(config.repositoryPath, ["rev-parse", branch])).trim();
@@ -38,8 +39,12 @@ export async function inspectAndVerify(branch: string, config: RunnerConfig): Pr
   try {
     await git(config.repositoryPath, ["worktree", "add", "--detach", worktree, branch]);
     await exec("npm", ["ci", "--ignore-scripts", "--prefer-offline"], { cwd: worktree, timeout: 90_000, maxBuffer: 8 * 1024 * 1024 });
-    await exec("npm", ["run", "build", "--workspace", "@qoder-live-lab/showcase"], { cwd: worktree, timeout: 60_000, maxBuffer: 8 * 1024 * 1024 });
-    return { branch, commitSha, files, diff, policy, testSummary: "Policy passed · Showcase build passed" };
+    try {
+      await exec("npm", [...CANDIDATE_VERIFICATION_ARGS], { cwd: worktree, timeout: 240_000, maxBuffer: 16 * 1024 * 1024 });
+    } catch (error) {
+      throw new Error("Candidate verification checks failed before pull request creation", { cause: error });
+    }
+    return { branch, commitSha, files, diff, policy, testSummary: "Policy, tests, lint, Showcase build, and control build passed" };
   } finally {
     await git(config.repositoryPath, ["worktree", "remove", "--force", worktree]).catch(() => undefined);
     await rm(worktree, { recursive: true, force: true });
