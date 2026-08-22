@@ -45,12 +45,12 @@ test("server-renders the Qoder Live Lab public board", async () => {
   assert.match(html, /What should the market become next/);
   assert.match(html, /Ask about this lab/i);
   assert.match(html, /Live Pipeline/i);
-  assert.match(html, /Change log/i);
-  assert.match(html, /Boundary evidence/i);
+  assert.match(html, /Failed Changes/i);
+  assert.doesNotMatch(html, /Change log/i);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 
-test("server-renders stage, release history, and operator routes", async () => {
+test("server-renders stage and operator routes and folds versions into the pipeline", async () => {
   const [stage, releases, ops] = await Promise.all([render("/stage"), render("/releases"), render("/ops")]);
   assert.equal(stage.status, 200);
   assert.equal(releases.status, 200);
@@ -59,6 +59,6 @@ test("server-renders stage, release history, and operator routes", async () => {
   assert.match(stageHtml, /Current verified market dashboard/i);
   assert.match(stageHtml, /sandbox="allow-scripts allow-pointer-lock allow-same-origin"/i);
   assert.doesNotMatch(stageHtml, /sandbox="[^"]*(allow-forms|allow-popups|allow-top-navigation)/i);
-  assert.match(await releases.text(), /See what changed/i);
+  assert.match(await releases.text(), /Live Pipeline/i);
   assert.match(await ops.text(), /Trusted control plane/i);
 });

@@ -1,14 +1,14 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   OPENING_RELEASE_REQUEST_ID,
   OPENING_RELEASE_REQUIREMENT,
   OPENING_RELEASE_VERSION,
   type BoardSnapshot,
   type ChangeRequest,
-  type RequestEvent,
+  type Release,
   type RequestStatus,
 } from "@qoder-live-lab/contracts";
 import { REHEARSAL_FEATURES } from "@qoder-live-lab/contracts/features";
@@ -57,9 +57,9 @@ const pipelineLanes: { key: string; statuses: RequestStatus[]; label: string; ey
   { key: "coding", statuses: ["coding"], label: "Building", eyebrow: "Qoder Cloud Agent" },
   { key: "testing", statuses: ["testing", "deploying"], label: "Verifying", eyebrow: "Policy + tests" },
   { key: "live", statuses: ["live"], label: "Shipped", eyebrow: "Verified releases" },
+  { key: "failed", statuses: ["rejected", "blocked", "failed", "cancelled"], label: "Failed Changes", eyebrow: "Not promoted" },
 ];
 
-type ChangeLogItem = { card: ChangeRequest; event: RequestEvent };
 type PublicPage = "build" | "pipeline";
 
 export default function Home() {
@@ -69,6 +69,7 @@ export default function Home() {
   const [notice, setNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [activePage, setActivePage] = useState<PublicPage>("build");
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -94,22 +95,24 @@ export default function Home() {
     return () => window.removeEventListener("hashchange", syncPageToHash);
   }, []);
 
+  useEffect(() => {
+    if (!selectedTicketId) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedTicketId(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [selectedTicketId]);
+
   const grouped = useMemo(
     () => Object.fromEntries(pipelineLanes.map((lane) => [lane.key, board.requests.filter((card) => lane.statuses.includes(card.status))])),
     [board],
   );
-  const changeLog = useMemo(
-    () => board.requests
-      .flatMap((card) => card.events.map((event) => ({ card, event })))
-      .sort((left, right) => Date.parse(right.event.createdAt) - Date.parse(left.event.createdAt))
-      .slice(0, 16),
-    [board],
-  );
-  const latestBoundary = board.requests.find((item) => item.status === "blocked" || item.status === "rejected");
-  const attention = board.requests.filter((item) => item.status === "failed" || item.status === "cancelled");
   const activeRequest = board.requests.find((item) => item.id === board.system.activeRequestId);
+  const selectedTicket = board.requests.find((item) => item.id === selectedTicketId);
 
   function selectPage(page: PublicPage) {
+    setSelectedTicketId(null);
     setActivePage(page);
     window.history.replaceState(null, "", page === "pipeline" ? "#pipeline" : "#build");
   }
@@ -165,7 +168,6 @@ export default function Home() {
         </nav>
         <div className="public-utilities-v2">
           <a href="/stage">Stage</a>
-          <a href="/releases">Versions</a>
           <span className="public-live-v2"><i /> LIVE · {board.system.activeRelease.version}</span>
         </div>
       </header>
@@ -240,94 +242,115 @@ export default function Home() {
 
         <div className="pipeline-board-v2" aria-label="Live pipeline columns; swipe horizontally on mobile">
           {pipelineLanes.map((lane) => (
-            <PipelineLane key={lane.key} lane={lane} cards={grouped[lane.key] ?? []} />
+            <PipelineLane key={lane.key} lane={lane} cards={grouped[lane.key] ?? []} onSelect={setSelectedTicketId} />
           ))}
-          <ChangeLogColumn items={changeLog} attention={attention} latestBoundary={latestBoundary} liveVersion={board.system.activeRelease.version} />
         </div>
       </section>
 
+      {selectedTicket && <TicketDialog card={selectedTicket} activeRelease={board.system.activeRelease} previousRelease={board.system.previousRelease} onClose={() => setSelectedTicketId(null)} />}
       <RepoGuide />
     </main>
   );
 }
 
-function PipelineLane({ lane, cards }: { lane: (typeof pipelineLanes)[number]; cards: ChangeRequest[] }) {
+function PipelineLane({ lane, cards, onSelect }: { lane: (typeof pipelineLanes)[number]; cards: ChangeRequest[]; onSelect: (id: string) => void }) {
   return (
     <section className={`pipeline-lane-v2 lane-${lane.key}`}>
       <header><div><i />{lane.label}</div><small>{lane.eyebrow}</small></header>
       <div className="pipeline-cards-v2" role="region" aria-label={`${lane.label} requests`}>
-        {cards.map((card) => <RequestCard key={card.id} card={card} />)}
+        {cards.map((card) => <RequestCard key={card.id} card={card} onSelect={onSelect} />)}
         {cards.length === 0 && <div className="pipeline-empty-v2">{lane.key === "queued" ? "Your idea could be next." : "No changes here right now."}</div>}
       </div>
     </section>
   );
 }
 
-function RequestCard({ card }: { card: ChangeRequest }) {
+function RequestCard({ card, onSelect }: { card: ChangeRequest; onSelect: (id: string) => void }) {
   return (
-    <details className={`pipeline-card-v2 status-${card.status}`}>
-      <summary>
-        <div className="pipeline-card-top-v2"><span>{card.id}</span><b>{card.status.toUpperCase()}</b></div>
-        <h3>{card.title}</h3>
-        <p>Requested by {card.author}</p>
-        <footer><span>{card.releaseVersion ?? card.testSummary ?? card.events.at(-1)?.message ?? "Awaiting evidence"}</span><b>＋</b></footer>
-      </summary>
-      <div className="pipeline-card-detail-v2">
-        {card.policy && <div><b>{card.policy.ruleId}</b><p>{card.policy.publicReason}</p>{card.policy.evidence.map((item) => <span key={item}>↳ {item}</span>)}</div>}
-        {card.files?.map((file) => <span key={file}>EDIT · {file}</span>)}
-        {card.events.slice(-4).map((event) => <span key={event.id}>{event.kind.toUpperCase()} · {event.message}</span>)}
-        {card.pullRequestUrl && <a href={card.pullRequestUrl} target="_blank" rel="noreferrer">Open pull request ↗</a>}
-        {card.previewUrl && <a href={card.previewUrl} target="_blank" rel="noreferrer">Open preview ↗</a>}
-      </div>
-    </details>
+    <button type="button" className={`pipeline-card-v2 status-${card.status}`} onClick={() => onSelect(card.id)} aria-haspopup="dialog">
+      <span className="pipeline-card-top-v2"><span>{card.id}</span><b>{card.status.toUpperCase()}</b></span>
+      <strong className="pipeline-card-title-v2">{card.title}</strong>
+      <span className="pipeline-card-requester-v2">Requested by {card.author}</span>
+      <span className="pipeline-card-footer-v2"><span>{card.releaseVersion ?? card.testSummary ?? card.events.at(-1)?.message ?? "Awaiting evidence"}</span><b>↗</b></span>
+    </button>
   );
 }
 
-function ChangeLogColumn({ items, attention, latestBoundary, liveVersion }: { items: ChangeLogItem[]; attention: ChangeRequest[]; latestBoundary?: ChangeRequest; liveVersion: string }) {
+function TicketDialog({ card, activeRelease, previousRelease, onClose }: { card: ChangeRequest; activeRelease: Release; previousRelease?: Release; onClose: () => void }) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const release = [activeRelease, previousRelease].find((item) => item?.requestId === card.id);
+  const releaseVersion = card.releaseVersion ?? release?.version;
+  const releasePreviewUrl = card.previewUrl ?? release?.previewUrl;
+  const releaseCommit = card.commitSha ?? release?.commitSha;
+  const releaseActivatedAt = release?.activatedAt ?? card.completedAt;
+  const promoted = card.status === "live" && Boolean(releaseVersion);
+  const currentRelease = promoted && (activeRelease.requestId === card.id || activeRelease.version === releaseVersion);
+  const stopped = ["rejected", "blocked", "failed", "cancelled"].includes(card.status);
+
+  useEffect(() => { closeButtonRef.current?.focus(); }, []);
+
   return (
-    <aside className="pipeline-log-v2" aria-label="Change log">
-      <header><div><i />CHANGE LOG</div><small>LIVE EVIDENCE</small></header>
-      <div className="pipeline-log-scroll-v2" role="region" aria-label="Scrollable change events">
-        {latestBoundary && <BoundaryEvidence card={latestBoundary} liveVersion={liveVersion} />}
-        {attention.map((card) => (
-          <article className="attention-log-v2" key={card.id}>
-            <div><b>{card.status.toUpperCase()}</b><time>{utcClock(card.updatedAt)}</time></div>
-            <strong>{card.id}</strong>
-            <p>{card.title}</p>
-            <span>{card.events.at(-1)?.message ?? "The task stopped without promotion."}</span>
-          </article>
-        ))}
-        {items.map(({ card, event }) => <ChangeLogEvent key={event.id} card={card} event={event} />)}
-        {items.length === 0 && <div className="pipeline-log-empty-v2">Waiting for the next verified event.</div>}
-      </div>
-      <a className="all-releases-v2" href="/releases">OPEN FULL VERSION HISTORY <span>↗</span></a>
-    </aside>
+    <div className="ticket-modal-backdrop-v2">
+      <section className={`ticket-modal-v2 status-${card.status}`} role="dialog" aria-modal="true" aria-labelledby="ticket-modal-heading">
+        <header className="ticket-modal-header-v2">
+          <div><span>TICKET / VERSION DETAIL</span><b>{card.id}</b></div>
+          <div><strong>{card.status.toUpperCase()}</strong><button ref={closeButtonRef} type="button" onClick={onClose} aria-label="Close ticket details">×</button></div>
+        </header>
+
+        <div className="ticket-modal-scroll-v2">
+          <section className="ticket-modal-hero-v2">
+            <div><small>REQUIREMENT</small><h2 id="ticket-modal-heading">{card.title}</h2><p>Requested by <b>{card.author}</b> · {formatTicketDate(card.createdAt)}</p></div>
+            <div className="ticket-modal-release-mark-v2"><span>{promoted ? currentRelease ? "CURRENT RELEASE" : "VERIFIED VERSION" : "RELEASE STATUS"}</span><strong>{releaseVersion ?? "NOT RELEASED"}</strong><small>{promoted ? formatTicketDate(releaseActivatedAt) : stopped ? "Candidate stopped before promotion" : "Work in progress"}</small></div>
+          </section>
+
+          <div className="ticket-modal-grid-v2">
+            <section className="ticket-modal-panel-v2">
+              <header><span>CURRENT REQUEST</span><b>{card.status.toUpperCase()}</b></header>
+              <dl className="ticket-facts-v2">
+                <div><dt>LAST UPDATE</dt><dd>{formatTicketDate(card.updatedAt)}</dd></div>
+                <div><dt>AGENT</dt><dd>{card.qcaSessionId ? "QODER CLOUD AGENT" : card.source === "ops" ? "BOUNDARY CHALLENGE" : "QUEUE"}</dd></div>
+                <div><dt>BRANCH</dt><dd>{card.branch ?? "NOT CREATED"}</dd></div>
+                <div><dt>FILES</dt><dd>{card.files?.length ?? 0} CHANGED</dd></div>
+              </dl>
+              <div className="ticket-timeline-v2">
+                <span>QCA SESSION PROGRESS</span>
+                {card.events.slice(-8).map((event) => <div key={event.id}><time>{formatTicketClock(event.createdAt)}</time><i /><p><b>{event.kind.toUpperCase()}</b>{event.message}</p></div>)}
+                {card.events.length === 0 && <p className="ticket-empty-v2">Awaiting the first agent event.</p>}
+              </div>
+            </section>
+
+            <section className="ticket-modal-panel-v2 ticket-version-panel-v2">
+              <header><span>VERSION EVIDENCE</span><b>{promoted ? currentRelease ? "LIVE" : "IMMUTABLE" : "NO RELEASE"}</b></header>
+              {stopped && <div className="ticket-stop-proof-v2"><strong>0 FILES PROMOTED</strong><span>Live version unchanged · {activeRelease.version}</span></div>}
+              <div className="ticket-proof-v2">
+                <small>POLICY</small>
+                <b>{card.policy?.ruleId ?? (promoted ? "VERIFIED" : "PENDING")}</b>
+                <p>{card.policy?.publicReason ?? (promoted ? "This release passed the trusted promotion path." : "No policy decision has been recorded yet.")}</p>
+                {card.policy?.evidence.map((item) => <span key={item}>↳ {item}</span>)}
+              </div>
+              <div className="ticket-proof-v2"><small>TESTS & BUILD</small><b>{card.testSummary ?? (promoted ? "Release checks passed" : stopped ? "Candidate was not eligible for promotion" : "Verification has not completed")}</b></div>
+              <div className="ticket-files-v2"><small>FILES CHANGED</small>{card.files?.length ? card.files.map((file) => <span key={file}>EDIT · {file}</span>) : <span>{promoted ? "BASELINE · No file list recorded" : "NO PROMOTED FILES"}</span>}</div>
+              <div className="ticket-version-meta-v2"><span>COMMIT</span><b>{releaseCommit?.slice(0, 10) ?? "NONE"}</b><span>ACTIVATED</span><b>{promoted ? formatTicketDate(releaseActivatedAt) : "NEVER"}</b></div>
+            </section>
+          </div>
+        </div>
+
+        <footer className="ticket-modal-footer-v2">
+          <span>{promoted ? `IMMUTABLE PREVIEW · ${releaseVersion}` : stopped ? `NOT PROMOTED · ${activeRelease.version} REMAINS LIVE` : "CANDIDATE IN PROGRESS"}</span>
+          <div>{card.pullRequestUrl && <a href={card.pullRequestUrl} target="_blank" rel="noreferrer">VIEW PULL REQUEST ↗</a>}{releasePreviewUrl && <a href={releasePreviewUrl} target="_blank" rel="noreferrer">OPEN {promoted ? "THIS VERSION" : "PREVIEW"} ↗</a>}</div>
+        </footer>
+      </section>
+    </div>
   );
 }
 
-function ChangeLogEvent({ card, event }: ChangeLogItem) {
-  return (
-    <article className={`change-event-v2 event-${event.kind}`}>
-      <div><b>{event.kind.toUpperCase()}</b><time>{utcClock(event.createdAt)}</time></div>
-      <strong>{card.id} · {card.status.toUpperCase()}</strong>
-      <p>{event.message}</p>
-    </article>
-  );
+function formatTicketDate(value?: string) {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Hong_Kong" }).format(new Date(value)) + " HKT";
 }
 
-function BoundaryEvidence({ card, liveVersion }: { card: ChangeRequest; liveVersion: string }) {
-  return (
-    <details className="boundary-inline-v2" id="latest-blocked-evidence" open>
-      <summary><div><span>BOUNDARY EVIDENCE</span><strong>{card.id}</strong></div><b>{card.status.toUpperCase()}</b></summary>
-      <div className="boundary-decision-v2"><small>POLICY DECISION</small><b>{card.policy?.ruleId ?? "POLICY"}</b><strong>{card.policy?.publicReason ?? "Candidate did not pass the guardrails."}</strong>{card.policy?.evidence.map((item) => <span key={item}>↳ {item}</span>)}</div>
-      <div className="boundary-result-v2"><span>0 files promoted</span><span>Live version unchanged · {liveVersion}</span></div>
-      <footer><span>COMMIT · NONE</span><span>PREVIEW · NONE</span></footer>
-    </details>
-  );
-}
-
-function utcClock(value: string) {
-  return `${new Date(value).toISOString().slice(11, 16)} UTC`;
+function formatTicketClock(value: string) {
+  return new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Hong_Kong" }).format(new Date(value));
 }
 
 function fallbackCard(id: string, title: string, author: string, status: RequestStatus): ChangeRequest {
