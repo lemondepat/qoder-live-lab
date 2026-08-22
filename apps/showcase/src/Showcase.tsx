@@ -31,7 +31,7 @@ export function Showcase() {
 
   const quotes = market.quotes;
   const advanced = edition !== "baseline";
-  const feedTitle = market.status === "live" && market.session === "closed" ? "MARKET CLOSED · LONG BRIDGE" : market.status === "live" ? "LIVE · LONG BRIDGE" : market.status === "stale" ? "STALE · LAST GOOD TICK" : market.status === "delayed" ? "DELAYED · LONG BRIDGE" : "DEMO · AWAITING LIVE FEED";
+  const feedTitle = market.status === "live" && market.session === "closed" ? "MARKET CLOSED · LIVE FEED" : market.status === "live" ? "LIVE MARKET FEED" : market.status === "stale" ? "STALE · LAST GOOD TICK" : market.status === "delayed" ? "DELAYED MARKET FEED" : "DEMO · AWAITING LIVE FEED";
   const feedDetail = market.source === "longbridge" ? `${market.session.toUpperCase()} · SEQ ${market.sequence}` : "Trusted data plane ready";
   const sessionLabel = market.session === "closed" ? "MARKET CLOSED" : `${market.session.toUpperCase()} SESSION`;
 
@@ -48,7 +48,7 @@ export function Showcase() {
       <IndexKLine indices={market.indices} sequence={market.sequence} sessionLabel={sessionLabel} />
       <MarketPulseStrip quotes={quotes} />
       {edition === "baseline" ? <BaselineTable quotes={quotes} /> : <EnhancedMarket quotes={quotes} edition={edition} />}
-      <footer className="market-footer"><span>DISPLAY ONLY · NOT INVESTMENT ADVICE</span><span>{market.source === "longbridge" ? `MARKET DATA · ${market.providerLabel}` : advanced ? `FEATURE EDITION / ${edition.toUpperCase()}` : "BASELINE RELEASE / INTENTIONALLY SIMPLE"}</span></footer>
+      <footer className="market-footer"><span>DISPLAY ONLY · NOT INVESTMENT ADVICE</span><span>{market.source === "longbridge" ? "VERIFIED MARKET DATA" : advanced ? `FEATURE EDITION / ${edition.toUpperCase()}` : "BASELINE RELEASE / INTENTIONALLY SIMPLE"}</span></footer>
     </main>
   );
 }
