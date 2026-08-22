@@ -13,6 +13,11 @@ test("the public experience is a fixed-screen nav switcher", async () => {
   assert.match(page, /hidden=\{activePage !== "build"\}/);
   assert.match(page, /hidden=\{activePage !== "pipeline"\}/);
   assert.match(page, /selectPage\("pipeline"\)/);
+  assert.match(page, /label: "Failed Changes"/);
+  assert.match(page, /aria-haspopup="dialog"/);
+  assert.match(page, /role="dialog" aria-modal="true"/);
+  assert.match(page, /VERSION EVIDENCE/);
+  assert.doesNotMatch(page, /href="\/releases"/);
   assert.doesNotMatch(page, /scrollIntoView/);
   assert.doesNotMatch(page, /page-proof-v2/);
 
@@ -22,7 +27,9 @@ test("the public experience is a fixed-screen nav switcher", async () => {
   assert.match(styles, /\.build-page-v2 \{[\s\S]*?height:calc\(100dvh - 72px\);[\s\S]*?overflow:hidden;/);
   assert.match(styles, /\.pipeline-page-v2 \{ height:calc\(100dvh - 72px\);[\s\S]*?overflow:hidden;/);
   assert.match(styles, /\.pipeline-cards-v2 \{[\s\S]*?overflow-y:auto;/);
-  assert.match(styles, /\.pipeline-log-scroll-v2 \{[\s\S]*?overflow-y:auto;/);
+  assert.match(styles, /\.pipeline-board-v2 \{[\s\S]*?grid-template-columns:repeat\(5,/);
+  assert.match(styles, /\.ticket-modal-scroll-v2 \{[\s\S]*?overflow-y:auto;/);
+  assert.doesNotMatch(styles, /pipeline-log-v2/);
 });
 
 test("the public experience protects phone scan, keyboard, and touch workflows", async () => {
