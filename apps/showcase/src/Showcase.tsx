@@ -7,6 +7,7 @@ import { computeMarketPulse } from "./market-pulse";
 import { VolatilityWeatherMap } from "./volatility-storm-map";
 import { SectorHeatmapBoard } from "./sector-heatmap-board";
 import { anchorSeries, appendPoint, clampToSession, formatMinute, hongKongMinute, hongKongTradingDay, intradayExtremes, intradaySpan, linePath, areaPath, observationScope, percentFrom, priceLevels, runningAverage, SESSION, sessionProgress, timeLevels, tradedMinutes, TRADED_MINUTES, trustedIntradaySeries, type IntradayPoint, type IntradaySpan } from "./intraday";
+import { resolveActive, scopeInstruments, type IntradayScope } from "./intraday-scope";
 import "./showcase.css";
 
 const POINT_LIMIT = 390;
@@ -39,7 +40,7 @@ export function Showcase() {
       <section className="index-row">
         {market.indices.map((index) => <article key={`${index.symbol}-${market.sequence}`}><div><span>{index.symbol}</span><small>{index.label}</small></div><strong>{index.value}</strong><b className={index.change >= 0 ? "up" : "down"}>{index.change >= 0 ? "+" : ""}{index.change.toFixed(2)}%</b></article>)}
       </section>
-      <IntradayPanel indices={market.indices} sequence={market.sequence} sessionLabel={sessionLabel} session={market.session} marketTimestamp={market.marketTimestamp} status={market.status} source={market.source} />
+      <IntradayPanel indices={market.indices} quotes={quotes} sequence={market.sequence} sessionLabel={sessionLabel} session={market.session} marketTimestamp={market.marketTimestamp} status={market.status} source={market.source} />
       <MarketPulseStrip quotes={quotes} />
       <div className="watchlist-row"><span>WATCHLIST / {quotes.length}</span><ul className="tone-legend" aria-label="Change color legend"><li className="gain"><i />GAIN</li><li className="loss"><i />LOSS</li><li className="flat"><i />FLAT</li></ul></div>
       <SectorHeatmapBoard quotes={quotes} sessionLabel={sessionLabel} clock={clock} status={market.status} mode={sizing} onMode={setSizing} />
@@ -50,29 +51,33 @@ export function Showcase() {
 
 const tickTrack = new Map<string, { key: string; points: IntradayPoint[] }>();
 
-function IntradayPanel({ indices, sequence, sessionLabel, session, marketTimestamp, status, source }: { indices: MarketIndex[]; sequence: number; sessionLabel: string; session: string; marketTimestamp: string; status: string; source: string }) {
-  const [focus, setFocus] = useState("HSI");
-  const active = indices.find((index) => index.symbol === focus) ?? indices[0] ?? null;
-  const activeSymbol = active?.symbol ?? focus;
+function IntradayPanel({ indices, quotes, sequence, sessionLabel, session, marketTimestamp, status, source }: { indices: MarketIndex[]; quotes: MarketQuote[]; sequence: number; sessionLabel: string; session: string; marketTimestamp: string; status: string; source: string }) {
+  const [scope, setScope] = useState<IntradayScope>("index");
+  const [focusByScope, setFocusByScope] = useState<Record<IntradayScope, string>>({ index: "HSI", stock: "" });
+  const instruments = scopeInstruments(scope, indices, quotes);
+  const active = resolveActive(instruments, focusByScope[scope]);
+  const activeSymbol = active?.symbol ?? focusByScope[scope];
   const observed = active?.last ?? null;
   const stamped = new Date(marketTimestamp);
   const instant = Number.isNaN(stamped.getTime()) ? new Date() : stamped;
   const tradingDay = hongKongTradingDay(instant);
   const minute = clampToSession(hongKongMinute(instant));
-  const scope = observationScope(source, tradingDay, activeSymbol);
+  const trackScope = observationScope(source, tradingDay, `${scope}:${activeSymbol}`);
   const providerPoints = trustedIntradaySeries(active?.intraday ?? [], tradingDay);
   const hasOfficialMinutes = providerPoints.length > 0;
 
+  const setFocus = (symbol: string) => setFocusByScope((current) => ({ ...current, [scope]: symbol }));
+
   useEffect(() => {
     if (observed === null || hasOfficialMinutes) return;
-    const key = `${scope}:${sequence}:${observed}`;
-    const entry = tickTrack.get(scope);
+    const key = `${trackScope}:${sequence}:${observed}`;
+    const entry = tickTrack.get(trackScope);
     if (entry?.key === key) return;
-    tickTrack.set(scope, { key, points: appendPoint(entry?.points ?? [], { minute, value: observed }, POINT_LIMIT) });
-  }, [scope, observed, sequence, minute, hasOfficialMinutes]);
+    tickTrack.set(trackScope, { key, points: appendPoint(entry?.points ?? [], { minute, value: observed }, POINT_LIMIT) });
+  }, [trackScope, observed, sequence, minute, hasOfficialMinutes]);
 
-  const tracked = tickTrack.get(scope);
-  const observedPoints = observed === null || tracked?.key === `${scope}:${sequence}:${observed}`
+  const tracked = tickTrack.get(trackScope);
+  const observedPoints = observed === null || tracked?.key === `${trackScope}:${sequence}:${observed}`
     ? tracked?.points ?? []
     : appendPoint(tracked?.points ?? [], { minute, value: observed }, POINT_LIMIT);
   const points = hasOfficialMinutes ? providerPoints : observedPoints;
@@ -85,20 +90,26 @@ function IntradayPanel({ indices, sequence, sessionLabel, session, marketTimesta
   const elapsed = tradedMinutes(minute);
   const progress = Math.round(sessionProgress(minute) * 100);
   const amplitude = extremes && previousClose ? ((extremes.high - extremes.low) / previousClose) * 100 : null;
+  const scopeNoun = scope === "stock" ? "STOCK" : "INDEX";
 
   return <section className={`intraday-panel tone-${tone}`} aria-label={`${activeSymbol} one day intraday chart`}>
+    <div className="intraday-scope" role="tablist" aria-label="Intraday chart scope">
+      <button type="button" role="tab" className={scope === "index" ? "is-active" : ""} aria-selected={scope === "index"} onClick={() => setScope("index")}>INDICES</button>
+      <button type="button" role="tab" className={scope === "stock" ? "is-active" : ""} aria-selected={scope === "stock"} onClick={() => setScope("stock")}>STOCKS</button>
+    </div>
     <div className="intraday-head">
       <div className="intraday-title">
-        <span>INTRADAY · 1 DAY · {hasOfficialMinutes ? "OFFICIAL MINUTE BARS" : "LIVE LINE FROM OBSERVED TICKS"}</span>
+        <span>INTRADAY · 1 DAY · {scopeNoun} · {hasOfficialMinutes ? "OFFICIAL MINUTE BARS" : "LIVE LINE FROM OBSERVED TICKS"}</span>
         <h2>{activeSymbol} <small>{active?.label ?? ""}</small></h2>
+        {active?.meta && <em className="intraday-meta">{active.meta}</em>}
       </div>
-      <div className="intraday-switch" role="group" aria-label="Select index">
-        {indices.map((index) => <button key={index.symbol} type="button" className={index.symbol === activeSymbol ? "is-active" : ""} aria-pressed={index.symbol === activeSymbol} onClick={() => setFocus(index.symbol)}>
-          <b>{index.symbol}</b><i className={index.change >= 0 ? "up" : "down"}>{index.change >= 0 ? "+" : ""}{index.change.toFixed(2)}%</i>
+      <div className="intraday-switch" role="group" aria-label={`Select ${scopeNoun.toLowerCase()}`}>
+        {instruments.map((instrument) => <button key={instrument.symbol} type="button" className={instrument.symbol === activeSymbol ? "is-active" : ""} aria-pressed={instrument.symbol === activeSymbol} onClick={() => setFocus(instrument.symbol)}>
+          <b>{instrument.symbol}</b><i className={instrument.change >= 0 ? "up" : "down"}>{instrument.change >= 0 ? "+" : ""}{instrument.change.toFixed(2)}%</i>
         </button>)}
       </div>
       <dl className="intraday-readout">
-        <div><dt>LAST</dt><dd>{active?.value ?? "—"}</dd></div>
+        <div><dt>LAST</dt><dd>{active?.displayValue ?? "—"}</dd></div>
         <div><dt>DAY CHANGE</dt><dd className={tone}>{active ? `${active.change >= 0 ? "+" : ""}${active.change.toFixed(2)}%` : "—"}</dd></div>
         <div><dt>PREV CLOSE</dt><dd>{previousClose !== null ? formatLevel(previousClose) : "—"}</dd></div>
         <div><dt>DAY HIGH</dt><dd className="up">{extremes ? formatLevel(extremes.high) : "—"} <i>{extremes ? formatMinute(extremes.highMinute) : ""}</i></dd></div>
