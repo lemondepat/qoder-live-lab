@@ -43,6 +43,28 @@ export function buildCandles(values: number[], samplesPerCandle: number): Candle
   return candles;
 }
 
+/**
+ * Prepends the session reference level (previous close) so a complete candle
+ * exists from the first render instead of an empty chart.
+ */
+export function seedSeries(reference: number | null, samples: number[]): number[] {
+  if (reference === null || !Number.isFinite(reference)) return samples;
+  if (samples.length === 0) return [reference];
+  return samples[0] === reference ? samples : [reference, ...samples];
+}
+
+export type TradingDay = { weekday: string; isWeekend: boolean };
+
+const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+
+/** Resolves the session the chart represents; weekends fall back to Friday. */
+export function lastTradingDay(now: Date): TradingDay {
+  const day = now.getDay();
+  const back = day === 0 ? 2 : day === 6 ? 1 : 0;
+  const resolved = new Date(now.getTime() - back * 86_400_000);
+  return { weekday: WEEKDAYS[resolved.getDay()], isWeekend: back > 0 };
+}
+
 export function candleBounds(candles: Candle[]): CandleBounds {
   if (candles.length === 0) return { low: 0, high: 0, span: 1 };
   const low = Math.min(...candles.map((candle) => candle.low));

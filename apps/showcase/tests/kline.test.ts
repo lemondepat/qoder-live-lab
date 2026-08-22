@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appendSample, buildCandles, candleBounds, movingAverage, parseIndexValue } from "../src/kline";
+import { appendSample, buildCandles, candleBounds, lastTradingDay, movingAverage, parseIndexValue, seedSeries } from "../src/kline";
 
 test("parses formatted index values and rejects junk", () => {
   assert.equal(parseIndexValue("25,412.80"), 25412.8);
@@ -40,4 +40,17 @@ test("averages candle closes only once the span is filled", () => {
   const candles = buildCandles([10, 20, 30, 40], 1);
   assert.deepEqual(movingAverage(candles, 2), [null, 15, 25, 35]);
   assert.deepEqual(movingAverage(candles, 1), [10, 20, 30, 40]);
+});
+
+test("seeds the series with the reference close so a full candle always renders", () => {
+  assert.deepEqual(seedSeries(100, []), [100]);
+  assert.deepEqual(seedSeries(100, [101, 102]), [100, 101, 102]);
+  assert.deepEqual(seedSeries(100, [100, 101]), [100, 101]);
+  assert.deepEqual(seedSeries(null, [101]), [101]);
+});
+
+test("resolves weekends back to the last trading day", () => {
+  assert.deepEqual(lastTradingDay(new Date("2026-08-22T10:00:00Z")), { weekday: "FRI", isWeekend: true });
+  assert.deepEqual(lastTradingDay(new Date("2026-08-23T10:00:00Z")), { weekday: "FRI", isWeekend: true });
+  assert.deepEqual(lastTradingDay(new Date("2026-08-20T10:00:00Z")), { weekday: "THU", isWeekend: false });
 });

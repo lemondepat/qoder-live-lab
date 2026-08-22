@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useMarketFeed } from "./market-feed";
 import type { MarketIndex, MarketQuote } from "./market-data";
 import { computeMarketPulse } from "./market-pulse";
-import { appendSample, buildCandles, candleBounds, movingAverage, parseIndexValue, type Candle } from "./kline";
+import { appendSample, buildCandles, candleBounds, lastTradingDay, movingAverage, parseIndexValue, seedSeries, type Candle } from "./kline";
 import "./showcase.css";
 
 const SAMPLE_LIMIT = 180;
@@ -70,13 +70,16 @@ function IndexKLine({ indices, sequence, sessionLabel }: { indices: MarketIndex[
   }, [activeSymbol, observed, sequence]);
 
   const logged = tickLog.get(activeSymbol);
-  const samples = observed === null || logged?.key === `${sequence}:${observed}` ? logged?.values ?? [] : [...(logged?.values ?? []), observed];
+  const ticks = observed === null || logged?.key === `${sequence}:${observed}` ? logged?.values ?? [] : [...(logged?.values ?? []), observed];
+  const previousClose = active && observed !== null && active.change !== -100 ? observed / (1 + active.change / 100) : null;
+  const samples = seedSeries(previousClose, ticks);
   const candles = buildCandles(samples, SAMPLES_PER_CANDLE);
   const bounds = candleBounds(candles);
   const averages = movingAverage(candles, MA_SPAN);
-  const previousClose = active && observed !== null && active.change !== -100 ? observed / (1 + active.change / 100) : null;
   const latest = candles.length > 0 ? candles[candles.length - 1] : null;
   const tone = (active?.change ?? 0) >= 0 ? "up" : "down";
+  const session = lastTradingDay(new Date());
+  const sessionNote = session.isWeekend ? `WEEKEND · LAST TRADING DAY (${session.weekday})` : `${session.weekday} SESSION · ${sessionLabel}`;
 
   return <section className="kline-panel" aria-label={`${activeSymbol} candlestick chart`}>
     <div className="kline-head">
@@ -90,13 +93,14 @@ function IndexKLine({ indices, sequence, sessionLabel }: { indices: MarketIndex[
       <dl className="kline-readout">
         <div><dt>LAST</dt><dd>{active?.value ?? "—"}</dd></div>
         <div><dt>CHANGE</dt><dd className={tone}>{active ? `${active.change >= 0 ? "+" : ""}${active.change.toFixed(2)}%` : "—"}</dd></div>
+        <div><dt>PREV CLOSE</dt><dd>{previousClose !== null ? formatLevel(previousClose) : "—"}</dd></div>
         <div><dt>RANGE</dt><dd>{candles.length > 0 ? `${formatLevel(bounds.low)} – ${formatLevel(bounds.high)}` : "—"}</dd></div>
         <div><dt>BARS</dt><dd>{candles.length} <i>· {SAMPLES_PER_CANDLE} TICKS</i></dd></div>
       </dl>
     </div>
     <CandleChart candles={candles} bounds={bounds} averages={averages} previousClose={previousClose} symbol={activeSymbol} />
     <div className="kline-foot">
-      <span>{sessionLabel} · MA{MA_SPAN} OVER CANDLE CLOSES</span>
+      <span>{sessionNote} · MA{MA_SPAN} OVER CANDLE CLOSES</span>
       {latest && <span className={latest.close >= latest.open ? "up" : "down"}>LATEST BAR O {formatLevel(latest.open)} · H {formatLevel(latest.high)} · L {formatLevel(latest.low)} · C {formatLevel(latest.close)}</span>}
       <span>{samples.length} TICK{samples.length === 1 ? "" : "S"} OBSERVED · DERIVED VIEW, DISPLAY ONLY</span>
     </div>
@@ -108,16 +112,24 @@ function CandleChart({ candles, bounds, averages, previousClose, symbol }: { can
 
   const width = 1000;
   const height = 300;
-  const slot = width / Math.max(candles.length, 12);
-  const bodyWidth = Math.max(2, Math.min(18, slot * 0.58));
-  const toY = (value: number) => height - ((value - bounds.low) / bounds.span) * (height - 24) - 12;
+  const inset = 18;
+  // Include the reference level so the whole chart, wicks and prev-close line stay inside the frame.
+  const rawLow = previousClose !== null ? Math.min(bounds.low, previousClose) : bounds.low;
+  const rawHigh = previousClose !== null ? Math.max(bounds.high, previousClose) : bounds.high;
+  const pad = (rawHigh - rawLow || Math.max(1, rawHigh * 0.001)) * 0.08;
+  const low = rawLow - pad;
+  const span = rawHigh + pad - low || 1;
+  // Candles always span the full plot width, so a short history is still a complete chart.
+  const slot = width / candles.length;
+  const bodyWidth = Math.max(2, Math.min(26, slot * 0.62));
+  const toY = (value: number) => height - inset - ((value - low) / span) * (height - inset * 2);
   const centre = (index: number) => slot * (index + 0.5);
   const maPoints = averages
     .map((value, index) => (value === null ? null : `${centre(index).toFixed(2)},${toY(value).toFixed(2)}`))
     .filter((point): point is string => point !== null)
     .join(" ");
-  const guides = [bounds.high, bounds.low + bounds.span / 2, bounds.low];
-  const previousY = previousClose !== null && previousClose >= bounds.low && previousClose <= bounds.high ? toY(previousClose) : null;
+  const guides = [0, 0.25, 0.5, 0.75, 1].map((step) => rawHigh + pad - step * span);
+  const previousY = previousClose !== null ? toY(previousClose) : null;
 
   return <div className="kline-chart">
     <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label={`${symbol} candlestick chart built from ${candles.length} observed candles`}>
