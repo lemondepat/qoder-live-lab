@@ -87,14 +87,16 @@ test("the Stage bar matches the public header height and starting edge", async (
   assert.match(styles, /@media\(max-width:820px\) \{[\s\S]*?\.public-header-v2 \{ height:64px;/);
 });
 
-test("public read paths refresh every twenty seconds behind a shared cache", async () => {
-  const [page, stage, ops, marketFeed, boardRoute, marketRoute] = await Promise.all([
+test("live data paths refresh every twenty seconds behind a shared cache", async () => {
+  const [page, stage, ops, marketFeed, boardRoute, marketRoute, runnerConfig, runnerMarketFeed] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/stage/stage-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/ops/ops-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../apps/showcase/src/market-feed.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/board/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/market/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../apps/runner/src/config.ts", import.meta.url), "utf8"),
+    readFile(new URL("../apps/runner/src/market-feed.ts", import.meta.url), "utf8"),
   ]);
 
   for (const client of [page, stage, ops, marketFeed]) {
@@ -105,6 +107,8 @@ test("public read paths refresh every twenty seconds behind a shared cache", asy
     assert.match(route, /s-maxage=15/);
     assert.match(route, /stale-if-error=60/);
   }
+  assert.match(runnerConfig, /MARKET_PUBLISH_MS \|\| 20_000/);
+  assert.match(runnerMarketFeed, /setInterval\(\(\) => queuePublish\(\), Math\.max\(5_000, cadenceMs\)\)/);
 });
 
 test("CI applies the candidate diff boundary only to isolated QCA task branches", async () => {
