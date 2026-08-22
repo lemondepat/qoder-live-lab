@@ -24,6 +24,9 @@ export function loadConfig() {
     taskTimeoutMs: Number(process.env.AGENT_TIMEOUT_MS || 180_000),
     totalTimeoutMs: Number(process.env.TASK_TIMEOUT_MS || 300_000),
     pollMs: Number(process.env.RUNNER_POLL_MS || 2_000),
+    marketFeedProvider: process.env.MARKET_FEED_PROVIDER || "off",
+    longbridgeBinary: process.env.LONGBRIDGE_BINARY || "/opt/homebrew/bin/longbridge",
+    marketPublishMs: Number(process.env.MARKET_PUBLISH_MS || 1_000),
   };
 }
 

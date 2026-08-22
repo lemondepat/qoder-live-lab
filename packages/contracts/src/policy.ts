@@ -33,7 +33,7 @@ export function evaluateInput(title: string): PolicyDecision {
 }
 
 const allowedPrefixes = ["apps/showcase/src/", "apps/showcase/tests/", "apps/showcase/public/"];
-const protectedExact = new Set(["package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "apps/showcase/src/market-data.ts"]);
+const protectedExact = new Set(["package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "apps/showcase/src/market-data.ts", "apps/showcase/src/market-feed.ts"]);
 
 export function evaluateChanges(paths: string[], diff = ""): PolicyDecision {
   const normalized = paths.map((path) => path.replace(/^\.\//, ""));
@@ -51,11 +51,12 @@ export function evaluateChanges(paths: string[], diff = ""): PolicyDecision {
   );
   if (protectedPath) {
     const dependencyFile = /package\.json|lock/.test(protectedPath);
+    const marketFile = /apps\/showcase\/src\/market-(?:data|feed)\.ts$/.test(protectedPath);
     return {
       outcome: "block",
       layer: "changeset",
-      ruleId: dependencyFile ? "DEPS-001" : "SCOPE-001",
-      publicReason: dependencyFile ? "Dependency changes require operator approval." : protectedPath.endsWith("market-data.ts") ? "Market facts are controlled by the trusted data plane." : "The candidate changed a protected path.",
+      ruleId: dependencyFile ? "DEPS-001" : marketFile ? "DATA-001" : "SCOPE-001",
+      publicReason: dependencyFile ? "Dependency changes require operator approval." : marketFile ? "Market facts and feed connectivity are controlled by the trusted data plane." : "The candidate changed a protected path.",
       evidence: [`Protected path: ${redactEvidence(protectedPath)}`],
     };
   }
@@ -67,6 +68,9 @@ export function evaluateChanges(paths: string[], diff = ""): PolicyDecision {
   }
   if (/process\.env|import\.meta\.env|BEGIN [A-Z ]*PRIVATE KEY|gh[pousr]_[A-Za-z0-9_]+/i.test(diff)) {
     return { outcome: "block", layer: "changeset", ruleId: "SECRETS-001", publicReason: "The candidate referenced credentials or runtime secrets.", evidence: ["Secret access pattern detected"] };
+  }
+  if (/^-.*useMarketFeed\s*\(/im.test(diff) && !/^\+.*useMarketFeed\s*\(/im.test(diff)) {
+    return { outcome: "block", layer: "changeset", ruleId: "DATA-001", publicReason: "The trusted live market feed cannot be removed or replaced.", evidence: ["Trusted market feed consumption was removed"] };
   }
   if (/\b(?:place|execute|submit)(?:Real)?Order\b|\b(?:buy|sell)Button\b|brokerage|tradingApi/i.test(diff)) {
     return { outcome: "block", layer: "changeset", ruleId: "FINANCE-001", publicReason: "Trading actions are prohibited in the display-only market canvas.", evidence: ["Order execution pattern detected"] };

@@ -82,6 +82,41 @@ export type BoardSnapshot = {
   generatedAt: string;
 };
 
+export type MarketFeedStatus = "live" | "delayed" | "stale" | "demo" | "offline";
+export type MarketSession = "pre-open" | "morning" | "lunch" | "afternoon" | "closing" | "closed";
+
+export type MarketQuoteSnapshot = {
+  symbol: string;
+  vendorSymbol: string;
+  name: string;
+  sector: string;
+  kind: "index" | "equity";
+  currency: string;
+  last: number;
+  prevClose: number;
+  open: number;
+  high: number;
+  low: number;
+  change: number;
+  changePercent: number;
+  volume: number;
+  turnover: number;
+  timestamp: string;
+  trail: number[];
+};
+
+export type MarketSnapshot = {
+  source: "longbridge" | "demo";
+  providerLabel: string;
+  status: MarketFeedStatus;
+  session: MarketSession;
+  receivedAt: string;
+  marketTimestamp: string;
+  sequence: number;
+  indices: MarketQuoteSnapshot[];
+  quotes: MarketQuoteSnapshot[];
+};
+
 export type CreateRequestInput = {
   author: string;
   title: string;

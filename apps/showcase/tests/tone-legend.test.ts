@@ -9,7 +9,7 @@ const css = readFileSync(fileURLToPath(new URL("../src/showcase.css", import.met
 test("renders the GAIN/LOSS/FLAT legend on the watchlist header row", () => {
   const row = showcase.match(/<div className="watchlist-row">[\s\S]*?<\/div>/);
   assert.ok(row, "watchlist-row wrapper should exist");
-  assert.match(row![0], /WATCHLIST \/ 6/);
+  assert.match(row![0], /WATCHLIST \/ \{quotes\.length\}/);
   assert.match(row![0], /className="tone-legend"/);
   for (const label of ["GAIN", "LOSS", "FLAT"]) {
     assert.match(row![0], new RegExp(label));
