@@ -13,10 +13,27 @@ import "./showcase.css";
 
 const POINT_LIMIT = 390;
 
+type Theme = "dark" | "light";
+
+function ThemeToggle({ theme, onTheme }: { theme: Theme; onTheme: (next: Theme) => void }) {
+  const light = theme === "light";
+  return <button type="button" className="theme-toggle" aria-pressed={light}
+    aria-label={light ? "Switch to dark mode" : "Switch to light mode"}
+    title={light ? "Switch to dark mode" : "Switch to light mode"}
+    onClick={() => onTheme(light ? "dark" : "light")}>
+    <i aria-hidden="true" /><b>{light ? "LIGHT" : "DARK"}</b>
+  </button>;
+}
+
 export function Showcase() {
   const [clock, setClock] = useState("13:42:08");
   const [sizing, setSizing] = useState<"turnover" | "equal">("turnover");
+  const [theme, setTheme] = useState<Theme>("dark");
   const market = useMarketFeed();
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -36,6 +53,7 @@ export function Showcase() {
         <div className="market-brand"><span className="qoder-brand-icon" aria-hidden="true" /><div><b>HONG KONG MARKET PULSE</b><small>Built · verified · deployed by Qoder</small></div></div>
         <div className="market-session"><i className={market.status === "live" ? "is-live" : ""} /> {sessionLabel} <b>{clock} HKT</b></div>
         <div className={`feed-state feed-${market.status}`}><span>{feedTitle}</span><small>{feedDetail}</small></div>
+        <ThemeToggle theme={theme} onTheme={setTheme} />
       </header>
       <VolatilityWeatherMap quotes={quotes} sessionLabel={sessionLabel} clock={clock} status={market.status} />
       <section className="index-row">
