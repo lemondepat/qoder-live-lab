@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { OPENING_RELEASE_VERSION } from "../packages/contracts/src/index";
 import { createBoundaryChallenge, createRequest, finishRequest, getBoard, getMarketSnapshot, resetOpeningRelease, setSystem, writeMarketSnapshot } from "../lib/store";
 
 test("creates an allowed request in the queue idempotently", async () => {
@@ -30,15 +31,15 @@ test("promotion and rollback preserve immutable release evidence", async () => {
   const board = await getBoard();
   assert.equal(finished?.status, "live");
   assert.equal(board.system.activeRelease.requestId, request.id);
-  assert.equal(board.system.previousRelease?.version, "v0.4");
+  assert.equal(board.system.previousRelease?.version, OPENING_RELEASE_VERSION);
 });
 
 test("resets the Stage to the immutable, intentionally simple opening release", async () => {
   await resetOpeningRelease();
   const board = await getBoard();
-  assert.equal(board.system.activeRelease.version, "v0.4");
-  assert.match(board.system.activeRelease.previewUrl, /qoder-live-lab-canvas-8d0qaj3j9/);
-  assert.notEqual(board.system.previousRelease?.version, "v0.4");
+  assert.equal(board.system.activeRelease.version, OPENING_RELEASE_VERSION);
+  assert.match(board.system.activeRelease.previewUrl, /qoder-live-lab-canvas-arlg3imwb/);
+  assert.notEqual(board.system.previousRelease?.version, OPENING_RELEASE_VERSION);
 });
 
 test("persists a sanitized Longbridge snapshot for the public read path", async () => {
