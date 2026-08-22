@@ -7,7 +7,8 @@ import { computeMarketPulse } from "./market-pulse";
 import { VolatilityWeatherMap } from "./volatility-storm-map";
 import { SectorHeatmapBoard } from "./sector-heatmap-board";
 import { anchorSeries, appendPoint, clampToSession, formatMinute, hongKongMinute, hongKongTradingDay, intradayExtremes, intradaySpan, linePath, areaPath, observationScope, percentFrom, priceLevels, runningAverage, SESSION, sessionProgress, timeLevels, tradedMinutes, TRADED_MINUTES, trustedIntradaySeries, type IntradayPoint, type IntradaySpan } from "./intraday";
-import { resolveActive, scopeInstruments, type IntradayScope } from "./intraday-scope";
+import { indexInstrument, resolveActive, scopeInstruments, stockInstrument, type IntradayInstrument, type IntradayScope } from "./intraday-scope";
+import { lookupInstrument, normalizeCode, rememberCode, searchInstruments, type SymbolLookup } from "./symbol-lookup";
 import "./showcase.css";
 
 const POINT_LIMIT = 390;
@@ -54,6 +55,10 @@ const tickTrack = new Map<string, { key: string; points: IntradayPoint[] }>();
 function IntradayPanel({ indices, quotes, sequence, sessionLabel, session, marketTimestamp, status, source }: { indices: MarketIndex[]; quotes: MarketQuote[]; sequence: number; sessionLabel: string; session: string; marketTimestamp: string; status: string; source: string }) {
   const [scope, setScope] = useState<IntradayScope>("index");
   const [focusByScope, setFocusByScope] = useState<Record<IntradayScope, string>>({ index: "HSI", stock: "" });
+  const [query, setQuery] = useState("");
+  const [lookup, setLookup] = useState<SymbolLookup>({ state: "idle" });
+  const [history, setHistory] = useState<string[]>([]);
+  const universe = [...indices.map(indexInstrument), ...quotes.map(stockInstrument)];
   const instruments = scopeInstruments(scope, indices, quotes);
   const active = resolveActive(instruments, focusByScope[scope]);
   const activeSymbol = active?.symbol ?? focusByScope[scope];
@@ -67,6 +72,23 @@ function IntradayPanel({ indices, quotes, sequence, sessionLabel, session, marke
   const hasOfficialMinutes = providerPoints.length > 0;
 
   const setFocus = (symbol: string) => setFocusByScope((current) => ({ ...current, [scope]: symbol }));
+
+  const focusInstrument = (instrument: IntradayInstrument) => {
+    setScope(instrument.kind);
+    setFocusByScope((current) => ({ ...current, [instrument.kind]: instrument.symbol }));
+    setHistory((current) => rememberCode(current, instrument.symbol));
+    setLookup({ state: "resolved", instrument });
+    setQuery("");
+  };
+
+  const submitQuery = () => {
+    const result = lookupInstrument(universe, query);
+    if (result.state === "resolved") focusInstrument(result.instrument);
+    else setLookup(result);
+  };
+
+  const typed = normalizeCode(query);
+  const hints = searchInstruments(universe, query, 5);
 
   useEffect(() => {
     if (observed === null || hasOfficialMinutes) return;
@@ -96,6 +118,34 @@ function IntradayPanel({ indices, quotes, sequence, sessionLabel, session, marke
     <div className="intraday-scope" role="tablist" aria-label="Intraday chart scope">
       <button type="button" role="tab" className={scope === "index" ? "is-active" : ""} aria-selected={scope === "index"} onClick={() => setScope("index")}>INDICES</button>
       <button type="button" role="tab" className={scope === "stock" ? "is-active" : ""} aria-selected={scope === "stock"} onClick={() => setScope("stock")}>STOCKS</button>
+    </div>
+    <div className="symbol-search">
+      <form className="symbol-form" role="search" onSubmit={(event) => { event.preventDefault(); submitQuery(); }}>
+        <label htmlFor="symbol-input">CHART ANY CODE</label>
+        <div className="symbol-field">
+          <input id="symbol-input" type="text" inputMode="text" autoComplete="off" spellCheck={false} placeholder="e.g. 700, 1810.HK, XIAOMI, HSTECH"
+            value={query} aria-describedby="symbol-help"
+            onChange={(event) => { setQuery(event.target.value); setLookup({ state: "idle" }); }}
+            onKeyDown={(event) => { if (event.key === "Escape") { setQuery(""); setLookup({ state: "idle" }); } }} />
+          {typed.length > 0 && <em className="symbol-normalized">→ {typed}</em>}
+          <button type="submit">CHART</button>
+        </div>
+        <small id="symbol-help">Code, name or sector · matched against {universe.length} trusted Longbridge instruments</small>
+      </form>
+      {hints.length > 0 && <ul className="symbol-hints" aria-label="Matching instruments">
+        {hints.map((hint) => <li key={`${hint.kind}-${hint.symbol}`}>
+          <button type="button" onClick={() => focusInstrument(hint)}>
+            <b>{hint.symbol}</b><span>{hint.label}</span><i className={hint.change >= 0 ? "up" : "down"}>{hint.change >= 0 ? "+" : ""}{hint.change.toFixed(2)}%</i><u>{hint.kind === "index" ? "INDEX" : "STOCK"}</u>
+          </button>
+        </li>)}
+      </ul>}
+      {lookup.state === "unknown" && <p className="symbol-miss" role="status">
+        <b>{lookup.code}</b> is not published by the trusted feed, so nothing is charted for it. Try {lookup.suggestions.map((entry) => entry.symbol).join(" · ")}.
+      </p>}
+      {history.length > 0 && <div className="symbol-recent"><span>RECENT</span>{history.map((code) => {
+        const entry = universe.find((instrument) => instrument.symbol === code);
+        return entry ? <button key={`recent-${code}`} type="button" className={code === activeSymbol ? "is-active" : ""} onClick={() => focusInstrument(entry)}>{code}</button> : null;
+      })}</div>}
     </div>
     <div className="intraday-head">
       <div className="intraday-title">
