@@ -174,11 +174,10 @@ export default function Home() {
 
       <section className="build-page-v2" id="build" aria-labelledby="build-heading" hidden={activePage !== "build"}>
         <article className="build-story-v2">
-          <p className="page-index-v2">01 / BUILD IN PUBLIC</p>
           <h1 id="build-heading">Ask for a change.<br /><em>Watch it ship.</em></h1>
-          <p className="build-copy-v2">One live Hong Kong market dashboard. One bounded cloud agent. Your idea can become the next verified release while the market data keeps moving.</p>
+          <p className="build-copy-v2">One live Hong Kong market dashboard. One bounded Qoder Cloud Agent. Your idea can become the next verified release while the market data keeps moving.</p>
           <div className="journey-v2" aria-label="How a request becomes live">
-            <span>YOU ASK</span><i>→</i><span>QODER BUILDS</span><i>→</i><span>POLICY VERIFIES</span><i>→</i><span>LIVE</span>
+            <span>YOU ASK</span><i>→</i><span>QODER BUILDS</span><i>→</i><span>QODER VERIFIES</span><i>→</i><span>QODER DEPLOYS</span><i>→</i><span>LIVE</span>
           </div>
           <button type="button" className="pipeline-link-v2" onClick={() => selectPage("pipeline")}>Watch the pipeline <span>→</span></button>
         </article>
