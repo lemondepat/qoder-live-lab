@@ -217,11 +217,6 @@ export default function Home() {
           </div>
         </form>
 
-        <footer className="page-proof-v2">
-          <span><i /> LONG BRIDGE DATA STAYS TRUSTED</span>
-          <span><i /> ONLY THE MARKET CANVAS CAN CHANGE</span>
-          <span><i /> EVERY RELEASE IS TESTED</span>
-        </footer>
       </section>
 
       <section className="pipeline-page-v2" id="pipeline" aria-labelledby="pipeline-heading" hidden={activePage !== "pipeline"}>
