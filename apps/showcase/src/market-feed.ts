@@ -27,9 +27,21 @@ type ApiQuote = {
   timestamp: string;
   trail: number[];
   intraday: MarketIntradayPoint[];
+  featured?: boolean;
 };
 type ApiSnapshot = FeedMeta & { indices: ApiQuote[]; quotes: ApiQuote[] };
-export type MarketFeedView = FeedMeta & { indices: MarketIndex[]; quotes: MarketQuote[] };
+type ApiIntradaySnapshot = {
+  symbol: string;
+  vendorSymbol: string;
+  tradingDay: string;
+  receivedAt: string;
+  sequence: number;
+  points: MarketIntradayPoint[];
+};
+type ApiIntradayResponse =
+  | { status: "pending"; symbol: string; vendorSymbol: string }
+  | { status: "ready"; symbol: string; vendorSymbol: string; snapshot: ApiIntradaySnapshot };
+export type MarketFeedView = FeedMeta & { indices: MarketIndex[]; quotes: MarketQuote[]; universeQuotes: MarketQuote[] };
 
 const initialView: MarketFeedView = {
   source: "demo",
@@ -41,6 +53,7 @@ const initialView: MarketFeedView = {
   sequence: 0,
   indices: MARKET_INDICES,
   quotes: MARKET_QUOTES,
+  universeQuotes: MARKET_QUOTES,
 };
 
 export function useMarketFeed() {
@@ -48,9 +61,7 @@ export function useMarketFeed() {
 
   useEffect(() => {
     let active = true;
-    const endpoint = window.location.hostname === "localhost"
-      ? "http://localhost:3000/api/market"
-      : "https://qoder-live-lab.vercel.app/api/market";
+    const endpoint = controlEndpoint("/api/market");
 
     const refresh = async () => {
       try {
@@ -73,7 +84,69 @@ export function useMarketFeed() {
   return market;
 }
 
+export function useMarketIntraday(symbol: string) {
+  const [resolved, setResolved] = useState<{ symbol: string; snapshot: ApiIntradaySnapshot }>();
+
+  useEffect(() => {
+    if (!symbol) return;
+    let active = true;
+    let pollTimer: number | undefined;
+
+    const apply = (response: ApiIntradayResponse) => {
+      if (!active || response.status !== "ready") return false;
+      setResolved({ symbol: response.symbol, snapshot: response.snapshot });
+      return true;
+    };
+
+    const request = async () => {
+      try {
+        const response = await fetch(controlEndpoint("/api/market/intraday"), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ symbol }),
+        });
+        if (response.ok) apply(await response.json() as ApiIntradayResponse);
+      } catch { /* the last verified line remains visible */ }
+    };
+
+    const refresh = async () => {
+      let ready = false;
+      try {
+        const response = await fetch(`${controlEndpoint("/api/market/intraday")}?symbol=${encodeURIComponent(symbol)}`);
+        if (response.ok) ready = apply(await response.json() as ApiIntradayResponse);
+      } catch { /* retry below */ }
+      if (active) pollTimer = window.setTimeout(refresh, ready ? 20_000 : 1_500);
+    };
+
+    void request().finally(refresh);
+    const keepAlive = window.setInterval(request, 5 * 60_000);
+    return () => {
+      active = false;
+      if (pollTimer !== undefined) window.clearTimeout(pollTimer);
+      window.clearInterval(keepAlive);
+    };
+  }, [symbol]);
+
+  return resolved?.symbol === symbol ? resolved.snapshot : undefined;
+}
+
 function toView(snapshot: ApiSnapshot): MarketFeedView {
+  const allQuotes = snapshot.source === "longbridge" ? snapshot.quotes.map((quote) => ({
+    symbol: quote.symbol,
+    name: quote.name,
+    sector: quote.sector,
+    price: quote.last,
+    previousClose: quote.prevClose,
+    change: quote.changePercent,
+    volume: compactNumber(quote.volume),
+    trail: quote.trail.length > 1 ? quote.trail : [quote.open, quote.last],
+    open: quote.open,
+    high: quote.high,
+    low: quote.low,
+    timestamp: quote.timestamp,
+    intraday: quote.intraday ?? [],
+    featured: quote.featured,
+  })) : MARKET_QUOTES;
   return {
     source: snapshot.source,
     providerLabel: snapshot.providerLabel,
@@ -91,22 +164,16 @@ function toView(snapshot: ApiSnapshot): MarketFeedView {
       change: quote.changePercent,
       intraday: quote.intraday ?? [],
     })) : MARKET_INDICES,
-    quotes: snapshot.source === "longbridge" ? snapshot.quotes.map((quote) => ({
-        symbol: quote.symbol,
-        name: quote.name,
-        sector: quote.sector,
-        price: quote.last,
-        previousClose: quote.prevClose,
-        change: quote.changePercent,
-        volume: compactNumber(quote.volume),
-        trail: quote.trail.length > 1 ? quote.trail : [quote.open, quote.last],
-        open: quote.open,
-        high: quote.high,
-        low: quote.low,
-        timestamp: quote.timestamp,
-        intraday: quote.intraday ?? [],
-      })) : MARKET_QUOTES,
+    quotes: allQuotes.filter((quote) => quote.featured !== false),
+    universeQuotes: allQuotes,
   };
+}
+
+function controlEndpoint(path: string) {
+  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    return window.location.port === "4173" ? `http://localhost:3000${path}` : `${window.location.origin}${path}`;
+  }
+  return `https://qoder-live-lab.vercel.app${path}`;
 }
 
 function validSnapshot(value: ApiSnapshot) {

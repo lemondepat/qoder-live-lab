@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface } from "node:readline";
-import type { MarketIntradayPoint, MarketQuoteSnapshot, MarketSession, MarketSnapshot } from "@qoder-live-lab/contracts";
+import type { MarketIntradayPoint, MarketIntradaySnapshot, MarketQuoteSnapshot, MarketSession, MarketSnapshot } from "@qoder-live-lab/contracts";
 import type { RunnerConfig } from "./config";
 import {
   assertReadOnlyMarketMethod,
@@ -8,8 +8,13 @@ import {
   inspectMarketCapabilities,
   type LongbridgeInitializeResult,
 } from "./market-capabilities";
+import {
+  FEATURED_VENDOR_SYMBOLS,
+  MARKET_INSTRUMENT_BY_VENDOR,
+  MARKET_INSTRUMENTS,
+  resolveMarketVendorSymbol,
+} from "./market-universe";
 
-type Instrument = Pick<MarketQuoteSnapshot, "symbol" | "vendorSymbol" | "name" | "sector" | "kind" | "currency">;
 type RawQuote = Record<string, unknown> & { symbol?: string };
 type RawIntradayPoint = Record<string, unknown> & { timestamp?: unknown; price?: unknown };
 type RpcMessage = {
@@ -24,32 +29,24 @@ type MarketCache = {
   sequence: number;
 };
 
-export const MARKET_INSTRUMENTS: Instrument[] = [
-  { symbol: "HSI", vendorSymbol: "HSI.HK", name: "Hang Seng", sector: "Broad market", kind: "index", currency: "HKD" },
-  { symbol: "HSTECH", vendorSymbol: "HSTECH.HK", name: "Hang Seng TECH", sector: "Technology", kind: "index", currency: "HKD" },
-  { symbol: "HSCEI", vendorSymbol: "HSCEI.HK", name: "China Enterprises", sector: "China enterprises", kind: "index", currency: "HKD" },
-  { symbol: "9988", vendorSymbol: "9988.HK", name: "Alibaba", sector: "Internet", kind: "equity", currency: "HKD" },
-  { symbol: "0700", vendorSymbol: "700.HK", name: "Tencent", sector: "Internet", kind: "equity", currency: "HKD" },
-  { symbol: "3690", vendorSymbol: "3690.HK", name: "Meituan", sector: "Consumer", kind: "equity", currency: "HKD" },
-  { symbol: "1810", vendorSymbol: "1810.HK", name: "Xiaomi", sector: "Hardware", kind: "equity", currency: "HKD" },
-  { symbol: "1211", vendorSymbol: "1211.HK", name: "BYD", sector: "Mobility", kind: "equity", currency: "HKD" },
-  { symbol: "1024", vendorSymbol: "1024.HK", name: "Kuaishou", sector: "Media", kind: "equity", currency: "HKD" },
-];
-
-const instrumentByVendor = new Map(MARKET_INSTRUMENTS.map((instrument) => [instrument.vendorSymbol, instrument]));
 const INITIALIZE_ID = 1;
 const SUBSCRIBE_ID = 2;
 const QUOTE_SNAPSHOT_ID = 3;
+const INTRADAY_REQUEST_INTERVAL_MS = 125;
+const INTRADAY_MAX_IN_FLIGHT = 5;
+const ON_DEMAND_ACTIVE_MS = 10 * 60_000;
 
 export function startMarketFeed(
   config: RunnerConfig,
   publish: (snapshot: MarketSnapshot) => Promise<void>,
+  publishIntraday: (snapshots: MarketIntradaySnapshot[]) => Promise<void> = async () => undefined,
   onStatus: (message: string) => void = (message) => process.stdout.write(`${message}\n`),
 ) {
-  if (config.marketFeedProvider !== "longbridge") return { stop() {} };
+  if (config.marketFeedProvider !== "longbridge") return { stop() {}, requestIntraday(symbols: string[]) { void symbols; } };
   let stopped = false;
   let child: ChildProcessWithoutNullStreams | undefined;
   const cache: MarketCache = { quotes: new Map(), sequence: 0 };
+  const activeIntraday = new Map([...FEATURED_VENDOR_SYMBOLS].map((symbol) => [symbol, Number.POSITIVE_INFINITY]));
 
   void (async () => {
     let backoffMs = 2_000;
@@ -59,7 +56,7 @@ export function startMarketFeed(
         onStatus(cache.quotes.size
           ? "Market feed · reconnecting; last good shared snapshot remains available"
           : "Market feed · connecting to Longbridge OpenAPI");
-        await runSession(child, cache, config.marketPublishMs, publish, onStatus, () => stopped);
+        await runSession(child, cache, activeIntraday, config.marketPublishMs, publish, publishIntraday, onStatus, () => stopped);
         backoffMs = 2_000;
       } catch (error) {
         if (!stopped) {
@@ -72,6 +69,13 @@ export function startMarketFeed(
   })();
 
   return {
+    requestIntraday(symbols: string[]) {
+      const expiresAt = Date.now() + ON_DEMAND_ACTIVE_MS;
+      for (const symbol of symbols) {
+        const vendorSymbol = resolveMarketVendorSymbol(symbol);
+        if (vendorSymbol) activeIntraday.set(vendorSymbol, expiresAt);
+      }
+    },
     stop() {
       stopped = true;
       if (child?.stdin.writable) child.stdin.end();
@@ -83,8 +87,10 @@ export function startMarketFeed(
 async function runSession(
   child: ChildProcessWithoutNullStreams,
   cache: MarketCache,
+  activeIntraday: Map<string, number>,
   publishMs: number,
   publish: (snapshot: MarketSnapshot) => Promise<void>,
+  publishIntraday: (snapshots: MarketIntradaySnapshot[]) => Promise<void>,
   onStatus: (message: string) => void,
   isStopped: () => boolean,
 ) {
@@ -95,6 +101,10 @@ async function runSession(
   const cadenceMs = Number.isFinite(publishMs) ? Math.max(1_000, publishMs) : 20_000;
   const reader = createInterface({ input: child.stdout });
   const intradayRequests = new Map<number, string>();
+  const intradayQueue: string[] = [];
+  const requestedThisSession = new Set<string>();
+  const retryAfter = new Map<string, number>();
+  let intradayPump: NodeJS.Timeout | undefined;
   let quoteSnapshotInFlight = false;
   let nextRpcId = 100;
 
@@ -106,8 +116,12 @@ async function runSession(
       lastPublishedAt = Date.now();
       cache.sequence += 1;
       const snapshot = buildSnapshot([...cache.quotes.values()], cache.sequence);
+      const activeSnapshots = buildActiveIntradaySnapshots(cache.quotes, activeIntraday, cache.sequence);
       publishing = publishing
-        .then(() => publish(snapshot))
+        .then(async () => {
+          await publish(snapshot);
+          if (activeSnapshots.length) await publishIntraday(activeSnapshots);
+        })
         .catch((error) => onStatus(`Market snapshot delivery failed · ${safeMessage(error)}`));
     };
     const elapsed = Date.now() - lastPublishedAt;
@@ -121,14 +135,40 @@ async function runSession(
     child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, ...(params ? { params } : {}) })}\n`);
   };
 
-  const requestIntraday = (symbols = MARKET_INSTRUMENTS.map((instrument) => instrument.vendorSymbol)) => {
-    if (isStopped() || !child.stdin.writable) return;
-    for (const vendorSymbol of symbols) {
-      if ([...intradayRequests.values()].includes(vendorSymbol)) continue;
+  const scheduleIntradayPump = (delay = 0) => {
+    if (intradayPump || !intradayQueue.length) return;
+    intradayPump = setTimeout(() => {
+      intradayPump = undefined;
+      if (isStopped() || !child.stdin.writable || intradayRequests.size >= INTRADAY_MAX_IN_FLIGHT) {
+        scheduleIntradayPump(INTRADAY_REQUEST_INTERVAL_MS);
+        return;
+      }
+      const vendorSymbol = intradayQueue.shift();
+      if (!vendorSymbol) return;
       const id = nextRpcId++;
       intradayRequests.set(id, vendorSymbol);
       writeRequest(id, "quote.intraday", { symbol: vendorSymbol, trade_session: "intraday" });
+      scheduleIntradayPump(INTRADAY_REQUEST_INTERVAL_MS);
+    }, delay);
+  };
+
+  const requestIntraday = (symbols: string[]) => {
+    if (isStopped()) return;
+    for (const vendorSymbol of symbols) {
+      if (!MARKET_INSTRUMENT_BY_VENDOR.has(vendorSymbol) || requestedThisSession.has(vendorSymbol)) continue;
+      if ((retryAfter.get(vendorSymbol) ?? 0) > Date.now()) continue;
+      requestedThisSession.add(vendorSymbol);
+      intradayQueue.push(vendorSymbol);
     }
+    scheduleIntradayPump();
+  };
+
+  const queueActiveIntraday = () => {
+    const current = Date.now();
+    for (const [symbol, expiresAt] of activeIntraday) {
+      if (expiresAt < current) activeIntraday.delete(symbol);
+    }
+    requestIntraday([...activeIntraday.keys()]);
   };
 
   const requestQuoteSnapshot = () => {
@@ -140,6 +180,7 @@ async function runSession(
   };
 
   const heartbeat = setInterval(() => queuePublish(), Math.max(5_000, cadenceMs));
+  const demandPoll = setInterval(queueActiveIntraday, 500);
   const startup = setTimeout(() => child.kill("SIGTERM"), 15_000);
 
   child.stderr.on("data", (chunk) => {
@@ -158,6 +199,9 @@ async function runSession(
         const intradaySymbol = message.id === undefined ? undefined : intradayRequests.get(message.id);
         if (intradaySymbol) {
           intradayRequests.delete(message.id!);
+          requestedThisSession.delete(intradaySymbol);
+          retryAfter.set(intradaySymbol, Date.now() + 5_000);
+          scheduleIntradayPump(INTRADAY_REQUEST_INTERVAL_MS);
           onStatus(`Longbridge intraday unavailable for ${intradaySymbol} · ${message.error.message ?? "request failed"}`);
           return;
         }
@@ -197,7 +241,7 @@ async function runSession(
         if (!initial.length) {
           requestQuoteSnapshot();
         } else {
-          requestIntraday();
+          queueActiveIntraday();
         }
         onStatus(`Market feed · subscribed to ${initial.length || MARKET_INSTRUMENTS.length} Hong Kong instruments`);
         queuePublish(true);
@@ -208,7 +252,7 @@ async function runSession(
         quoteSnapshotInFlight = false;
         const initial = Array.isArray(message.result) ? message.result : [];
         for (const raw of initial) if (isObject(raw)) mergeQuote(cache.quotes, raw);
-        requestIntraday();
+        queueActiveIntraday();
         queuePublish(true);
         return;
       }
@@ -217,8 +261,15 @@ async function runSession(
       if (intradaySymbol) {
         intradayRequests.delete(message.id!);
         const count = mergeIntraday(cache.quotes, intradaySymbol, Array.isArray(message.result) ? message.result.filter(isObject) : []);
+        scheduleIntradayPump(INTRADAY_REQUEST_INTERVAL_MS);
         if (count && intradayRequests.size === 0) {
           onStatus(`Market feed · minute history complete · ${count} latest points · live ticks now extend the current minute`);
+        }
+        const intradaySnapshot = buildIntradaySnapshot(cache.quotes.get(intradaySymbol), cache.sequence);
+        if (intradaySnapshot) {
+          publishing = publishing
+            .then(() => publishIntraday([intradaySnapshot]))
+            .catch((error) => onStatus(`Intraday delivery failed · ${safeMessage(error)}`));
         }
         queuePublish();
         return;
@@ -232,7 +283,8 @@ async function runSession(
           mergeLiveIntraday(cache.quotes, message.params, previous);
           if (dayRollover) {
             requestQuoteSnapshot();
-            requestIntraday();
+            requestedThisSession.delete(vendorSymbol);
+            requestIntraday([vendorSymbol]);
           }
           queuePublish();
         }
@@ -241,6 +293,8 @@ async function runSession(
     child.once("error", (error) => reject(error));
     child.once("exit", (code, signal) => {
       clearInterval(heartbeat);
+      clearInterval(demandPoll);
+      if (intradayPump) clearTimeout(intradayPump);
       clearTimeout(startup);
       if (publishTimer) clearTimeout(publishTimer);
       reader.close();
@@ -254,7 +308,7 @@ async function runSession(
 
 export function mergeQuote(quotes: Map<string, MarketQuoteSnapshot>, raw: RawQuote) {
   const vendorSymbol = String(raw.symbol || "");
-  const instrument = instrumentByVendor.get(vendorSymbol);
+  const instrument = MARKET_INSTRUMENT_BY_VENDOR.get(vendorSymbol);
   if (!instrument) return false;
   const previous = quotes.get(vendorSymbol);
   const last = numberValue(raw.last_done, previous?.last ?? 0);
@@ -390,9 +444,39 @@ export function buildSnapshot(values: MarketQuoteSnapshot[], sequence: number, c
     receivedAt: current.toISOString(),
     marketTimestamp,
     sequence,
-    indices: sorted.filter((quote) => quote.kind === "index"),
-    quotes: sorted.filter((quote) => quote.kind === "equity"),
+    indices: sorted.filter((quote) => quote.kind === "index").map(compactQuote),
+    quotes: sorted.filter((quote) => quote.kind === "equity").map(compactQuote),
   };
+}
+
+export function buildIntradaySnapshot(quote: MarketQuoteSnapshot | undefined, sequence: number, current = new Date()): MarketIntradaySnapshot | undefined {
+  const points = quote?.intraday ?? [];
+  if (!quote || !points.length) return undefined;
+  return {
+    symbol: quote.symbol,
+    vendorSymbol: quote.vendorSymbol,
+    tradingDay: hongKongTradingDay(points.at(-1)!.timestamp),
+    receivedAt: current.toISOString(),
+    sequence,
+    points,
+  };
+}
+
+export function buildActiveIntradaySnapshots(
+  quotes: Map<string, MarketQuoteSnapshot>,
+  active: Map<string, number>,
+  sequence: number,
+  current = new Date(),
+) {
+  const now = current.getTime();
+  return [...active]
+    .filter(([, expiresAt]) => expiresAt >= now)
+    .map(([vendorSymbol]) => buildIntradaySnapshot(quotes.get(vendorSymbol), sequence, current))
+    .filter((snapshot): snapshot is MarketIntradaySnapshot => Boolean(snapshot));
+}
+
+function compactQuote(quote: MarketQuoteSnapshot): MarketQuoteSnapshot {
+  return { ...quote, intraday: [] };
 }
 
 export function marketSession(date = new Date()): MarketSession {

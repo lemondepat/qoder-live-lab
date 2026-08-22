@@ -104,6 +104,7 @@ export type MarketQuoteSnapshot = {
   sector: string;
   kind: "index" | "equity";
   currency: string;
+  featured?: boolean;
   last: number;
   prevClose: number;
   open: number;
@@ -117,6 +118,19 @@ export type MarketQuoteSnapshot = {
   trail: number[];
   intraday: MarketIntradayPoint[];
 };
+
+export type MarketIntradaySnapshot = {
+  symbol: string;
+  vendorSymbol: string;
+  tradingDay: string;
+  receivedAt: string;
+  sequence: number;
+  points: MarketIntradayPoint[];
+};
+
+export type MarketIntradayResponse =
+  | { status: "pending"; symbol: string; vendorSymbol: string }
+  | { status: "ready"; symbol: string; vendorSymbol: string; snapshot: MarketIntradaySnapshot };
 
 export type MarketSnapshot = {
   source: "longbridge" | "demo";

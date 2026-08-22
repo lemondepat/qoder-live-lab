@@ -16,6 +16,7 @@ export type MarketQuote = {
   trail: number[];
   previousClose: number;
   intraday: MarketIntradayPoint[];
+  featured?: boolean;
   open?: number;
   high?: number;
   low?: number;
