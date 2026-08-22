@@ -41,23 +41,29 @@ test("control and showcase publish the Qoder favicon and Apple touch icon", asyn
 });
 
 test("the public header publishes the supplied Qoder line brand", async () => {
-  const [page, logo] = await Promise.all([
+  const [page, layout, logo] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../public/qoder-line.png", import.meta.url)),
   ]);
   assert.match(page, /qoder-line\.png/);
   assert.match(page, />Live Lab</);
+  assert.doesNotMatch(page, /<i \/>\s*<b>Live Lab<\/b>/);
+  assert.match(layout, /Sulphur_Point/);
+  assert.match(layout, /--font-sulphur-point/);
   assert.deepEqual(logo.subarray(0, pngSignature.length), pngSignature);
 });
 
-test("every visible product brand mark uses the Qoder icon asset", async () => {
-  const sources = await Promise.all([
+test("every visible product brand mark uses an official Qoder asset", async () => {
+  const [stage, ...iconSources] = await Promise.all([
     readFile(new URL("../app/stage/stage-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/ops/ops-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../apps/showcase/src/Showcase.tsx", import.meta.url), "utf8"),
   ]);
 
-  for (const source of sources) {
+  assert.match(stage, /qoder-line\.png/);
+  assert.doesNotMatch(stage, /<span>Q<\/span>/);
+  for (const source of iconSources) {
     assert.match(source, /qoder-brand-icon/);
     assert.doesNotMatch(source, /<span>Q<\/span>/);
   }
@@ -80,9 +86,18 @@ test("the Stage and market canvas share the Qoder release narrative", async () =
     readFile(new URL("../apps/showcase/src/Showcase.tsx", import.meta.url), "utf8"),
   ]);
 
-  assert.match(stage, /Qoder builds · verifies · deploys/);
+  assert.match(stage, /qoder-line\.png/);
+  assert.match(stage, /<b>Live Lab<\/b>/);
+  assert.doesNotMatch(stage, /stage-brand[\s\S]*?<i aria-hidden="true" \/>/);
+  assert.match(stage, /BY \{displayedRequest\?\.author/);
+  assert.match(stage, /<span>SCAN<br \/>TO BUILD<\/span>[\s\S]*?<QRCodeSVG/);
+  assert.match(stage, /className="stage-live"/);
+  assert.match(stage, /NODE_ENV === "development" \? "\/showcase"/);
   assert.match(stage, /QODER BUILDS/);
   assert.match(stage, /QODER VERIFIES/);
   assert.match(stage, /QODER DEPLOYS/);
   assert.match(showcase, /Built · verified · deployed by Qoder/);
+  assert.doesNotMatch(showcase, /LONG BRIDGE|providerLabel/);
+  assert.match(showcase, /VERIFIED MARKET DATA/);
+  assert.match(showcase, /DISPLAY ONLY · NOT INVESTMENT ADVICE/);
 });

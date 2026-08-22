@@ -60,3 +60,22 @@ test("persists a sanitized Longbridge snapshot for the public read path", async 
   assert.equal(snapshot.sequence, 7);
   assert.equal(snapshot.quotes[0]?.last, 448.6);
 });
+
+test("keeps a twenty-second market cadence healthy and flags missed snapshots", async () => {
+  const base = {
+    source: "longbridge" as const,
+    providerLabel: "LONG BRIDGE OPENAPI",
+    status: "live" as const,
+    session: "afternoon" as const,
+    marketTimestamp: new Date().toISOString(),
+    sequence: 8,
+    indices: [],
+    quotes: [],
+  };
+
+  await writeMarketSnapshot({ ...base, receivedAt: new Date(Date.now() - 30_000).toISOString() });
+  assert.equal((await getMarketSnapshot()).status, "live");
+
+  await writeMarketSnapshot({ ...base, receivedAt: new Date(Date.now() - 46_000).toISOString() });
+  assert.equal((await getMarketSnapshot()).status, "stale");
+});

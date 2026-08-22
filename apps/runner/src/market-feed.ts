@@ -75,24 +75,29 @@ async function runSession(
   let publishTimer: NodeJS.Timeout | undefined;
   let publishing = Promise.resolve();
   let connected = false;
+  let lastPublishedAt = 0;
+  const cadenceMs = Number.isFinite(publishMs) ? Math.max(250, publishMs) : 20_000;
   const reader = createInterface({ input: child.stdout });
 
   const queuePublish = (immediate = false) => {
-    if (!immediate && publishTimer) return;
+    if (publishTimer) return;
     const run = () => {
       publishTimer = undefined;
       if (!quotes.size || isStopped()) return;
+      lastPublishedAt = Date.now();
       sequence += 1;
       const snapshot = buildSnapshot([...quotes.values()], sequence);
       publishing = publishing
         .then(() => publish(snapshot))
         .catch((error) => onStatus(`Market snapshot delivery failed · ${safeMessage(error)}`));
     };
-    if (immediate) run();
-    else publishTimer = setTimeout(run, Math.max(250, publishMs));
+    const elapsed = Date.now() - lastPublishedAt;
+    const delay = immediate && lastPublishedAt === 0 ? 0 : Math.max(250, cadenceMs - elapsed);
+    if (delay === 0) run();
+    else publishTimer = setTimeout(run, delay);
   };
 
-  const heartbeat = setInterval(() => queuePublish(true), 5_000);
+  const heartbeat = setInterval(() => queuePublish(), Math.max(5_000, cadenceMs));
   const startup = setTimeout(() => child.kill("SIGTERM"), 15_000);
 
   child.stderr.on("data", (chunk) => {

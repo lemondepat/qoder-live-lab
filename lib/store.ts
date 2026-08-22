@@ -133,6 +133,29 @@ async function readRequests(): Promise<StoredRequest[]> {
   return rows.map((row) => row.payload as StoredRequest);
 }
 
+async function readRequest(id: string): Promise<StoredRequest | undefined> {
+  const url = databaseUrl();
+  if (!url) return memory.requests.find((item) => item.id === id);
+  await ensureSchema();
+  const rows = await neon(url)`SELECT payload FROM qll_requests WHERE id = ${id} LIMIT 1`;
+  return rows[0]?.payload as StoredRequest | undefined;
+}
+
+async function readNextQueuedRequest(): Promise<StoredRequest | undefined> {
+  const url = databaseUrl();
+  if (!url) {
+    return memory.requests
+      .filter((item) => item.status === "queued")
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
+  }
+  await ensureSchema();
+  const rows = await neon(url)`SELECT payload FROM qll_requests
+    WHERE payload->>'status' = 'queued'
+    ORDER BY created_at ASC
+    LIMIT 1`;
+  return rows[0]?.payload as StoredRequest | undefined;
+}
+
 async function writeRequest(request: StoredRequest) {
   const url = databaseUrl();
   if (!url) {
@@ -177,7 +200,7 @@ export async function getMarketSnapshot(): Promise<MarketSnapshot> {
         return (rows[0]?.payload as MarketSnapshot | undefined) ?? defaultMarketSnapshot;
       })()
     : memory.market;
-  if (snapshot.source === "longbridge" && Date.now() - new Date(snapshot.receivedAt).getTime() > 15_000) {
+  if (snapshot.source === "longbridge" && Date.now() - new Date(snapshot.receivedAt).getTime() > 45_000) {
     return { ...snapshot, status: "stale" };
   }
   return snapshot;
@@ -229,7 +252,7 @@ export async function createRequest(input: CreateRequestInput): Promise<ChangeRe
 }
 
 export async function updateRequest(id: string, patch: Partial<ChangeRequest>): Promise<ChangeRequest | undefined> {
-  const request = (await readRequests()).find((item) => item.id === id);
+  const request = await readRequest(id);
   if (!request) return undefined;
   const next: StoredRequest = { ...request, ...patch, id: request.id, idempotencyKey: request.idempotencyKey, updatedAt: now() };
   await writeRequest(next);
@@ -237,25 +260,64 @@ export async function updateRequest(id: string, patch: Partial<ChangeRequest>): 
 }
 
 export async function appendEvent(id: string, input: Pick<RequestEvent, "kind" | "message"> & { providerEventId?: string }) {
-  const request = (await readRequests()).find((item) => item.id === id);
+  const request = await readRequest(id);
   if (!request) return undefined;
   if (input.providerEventId && request.events.some((event) => event.providerEventId === input.providerEventId)) return request;
   const event = { ...makeEvent(id, input.kind, input.message), providerEventId: input.providerEventId };
-  return updateRequest(id, { events: [...request.events, event], lastProviderEventId: input.providerEventId ?? request.lastProviderEventId });
+  const next: StoredRequest = {
+    ...request,
+    events: [...request.events, event],
+    lastProviderEventId: input.providerEventId ?? request.lastProviderEventId,
+    updatedAt: now(),
+  };
+  await writeRequest(next);
+  return next;
+}
+
+export async function claimRunnerTask() {
+  let system = await readSystem();
+  let clearedStaleActive = false;
+  const heartbeatAt = now();
+  const heartbeatDue = !system.runnerLastSeenAt || Date.now() - new Date(system.runnerLastSeenAt).getTime() >= 10_000;
+
+  if (system.queuePaused) {
+    if (heartbeatDue) {
+      system = { ...system, runnerLastSeenAt: heartbeatAt };
+      await writeSystem(system);
+    }
+    return { request: undefined, provider: system.provider };
+  }
+
+  if (system.activeRequestId) {
+    const active = await readRequest(system.activeRequestId);
+    if (active && ["coding", "testing", "deploying"].includes(active.status)) {
+      if (heartbeatDue) {
+        system = { ...system, runnerLastSeenAt: heartbeatAt };
+        await writeSystem(system);
+      }
+      return { request: active, provider: system.provider };
+    }
+    system = { ...system, activeRequestId: undefined };
+    clearedStaleActive = true;
+  }
+
+  const next = await readNextQueuedRequest();
+  if (!next) {
+    if (heartbeatDue || clearedStaleActive) {
+      system = { ...system, runnerLastSeenAt: heartbeatAt };
+      await writeSystem(system);
+    }
+    return { request: undefined, provider: system.provider };
+  }
+
+  const claimed = await updateRequest(next.id, { status: "coding", startedAt: heartbeatAt });
+  system = { ...system, activeRequestId: next.id, runnerLastSeenAt: heartbeatAt };
+  await writeSystem(system);
+  return { request: claimed, provider: system.provider };
 }
 
 export async function claimNextRequest() {
-  const system = await readSystem();
-  if (system.queuePaused) return undefined;
-  if (system.activeRequestId) {
-    return (await readRequests()).find((item) => item.id === system.activeRequestId && ["coding", "testing", "deploying"].includes(item.status));
-  }
-  const next = (await readRequests()).filter((item) => item.status === "queued").sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
-  if (!next) return undefined;
-  const startedAt = now();
-  await updateRequest(next.id, { status: "coding", startedAt });
-  await writeSystem({ ...system, activeRequestId: next.id, runnerLastSeenAt: startedAt });
-  return { ...next, status: "coding" as const, startedAt };
+  return (await claimRunnerTask()).request;
 }
 
 export async function heartbeatRunner() {

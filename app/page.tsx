@@ -13,6 +13,7 @@ import {
 } from "@qoder-live-lab/contracts";
 import { REHEARSAL_FEATURES } from "@qoder-live-lab/contracts/features";
 import { GUARDRAIL_CHALLENGES } from "@qoder-live-lab/contracts/policy";
+import { publicUiText } from "@/lib/public-copy";
 
 const fallback: BoardSnapshot = {
   generatedAt: new Date().toISOString(),
@@ -36,7 +37,7 @@ const fallback: BoardSnapshot = {
     {
       ...fallbackCard(OPENING_RELEASE_REQUEST_ID, OPENING_RELEASE_REQUIREMENT, "Qoder Live Lab", "live"),
       releaseVersion: OPENING_RELEASE_VERSION,
-      testSummary: "Longbridge feed · policy · tests · build verified",
+      testSummary: "Market feed · policy · tests · build verified",
     },
     {
       ...fallbackCard("QLL-015", "Modify the admin control panel", "Guardrail demo", "blocked"),
@@ -74,13 +75,13 @@ export default function Home() {
   useEffect(() => {
     let active = true;
     const refresh = async () => {
-      const response = await fetch("/api/board", { cache: "no-store" });
+      const response = await fetch("/api/board");
       if (!response.ok) return;
       const next = await response.json() as BoardSnapshot;
       if (active) setBoard(next);
     };
     const kickoff = window.setTimeout(() => refresh().catch(() => undefined), 0);
-    const timer = window.setInterval(() => refresh().catch(() => undefined), 2000);
+    const timer = window.setInterval(() => refresh().catch(() => undefined), 20_000);
     return () => {
       active = false;
       window.clearTimeout(kickoff);
@@ -158,7 +159,6 @@ export default function Home() {
       <header className="public-header-v2">
         <button type="button" className="public-brand-v2" onClick={() => selectPage("build")} aria-label="Open the Build page">
           <Image src="/qoder-line.png" alt="Qoder" width={150} height={39} priority />
-          <i />
           <b>Live Lab</b>
         </button>
         <nav className="public-pages-v2" aria-label="Public pages">
@@ -248,9 +248,9 @@ function RequestCard({ card, onSelect }: { card: ChangeRequest; onSelect: (id: s
   return (
     <button type="button" className={`pipeline-card-v2 status-${card.status}`} onClick={() => onSelect(card.id)} aria-haspopup="dialog">
       <span className="pipeline-card-top-v2"><span>{card.id}</span><b>{publicStatusLabel(card.status)}</b></span>
-      <strong className="pipeline-card-title-v2">{card.title}</strong>
+      <strong className="pipeline-card-title-v2">{publicUiText(card.title)}</strong>
       <span className="pipeline-card-requester-v2">Requested by {card.author}</span>
-      <span className="pipeline-card-footer-v2"><span>{card.releaseVersion ?? card.testSummary ?? card.events.at(-1)?.message ?? "Awaiting evidence"}</span><b>↗</b></span>
+      <span className="pipeline-card-footer-v2"><span>{(card.releaseVersion ?? publicUiText(card.testSummary ?? card.events.at(-1)?.message)) || "Awaiting evidence"}</span><b>↗</b></span>
     </button>
   );
 }
@@ -278,7 +278,7 @@ function TicketDialog({ card, activeRelease, previousRelease, onClose }: { card:
 
         <div className="ticket-modal-scroll-v2">
           <section className="ticket-modal-hero-v2">
-            <div><small>REQUIREMENT</small><h2 id="ticket-modal-heading">{card.title}</h2><p>Requested by <b>{card.author}</b> · {formatTicketDate(card.createdAt)}</p></div>
+            <div><small>REQUIREMENT</small><h2 id="ticket-modal-heading">{publicUiText(card.title)}</h2><p>Requested by <b>{card.author}</b> · {formatTicketDate(card.createdAt)}</p></div>
             <div className="ticket-modal-release-mark-v2"><span>{promoted ? currentRelease ? "CURRENT RELEASE" : "VERIFIED VERSION" : "RELEASE STATUS"}</span><strong>{releaseVersion ?? "NOT RELEASED"}</strong><small>{promoted ? formatTicketDate(releaseActivatedAt) : stopped ? "Candidate stopped before promotion" : "Work in progress"}</small></div>
           </section>
 
@@ -293,7 +293,7 @@ function TicketDialog({ card, activeRelease, previousRelease, onClose }: { card:
               </dl>
               <div className="ticket-timeline-v2">
                 <span>QODER CLOUD AGENT PROGRESS</span>
-                {card.events.slice(-8).map((event) => <div key={event.id}><time>{formatTicketClock(event.createdAt)}</time><i /><p><b>{event.kind.toUpperCase()}</b>{event.message}</p></div>)}
+                {card.events.slice(-8).map((event) => <div key={event.id}><time>{formatTicketClock(event.createdAt)}</time><i /><p><b>{event.kind.toUpperCase()}</b>{publicUiText(event.message)}</p></div>)}
                 {card.events.length === 0 && <p className="ticket-empty-v2">Awaiting the first agent event.</p>}
               </div>
             </section>
@@ -304,10 +304,10 @@ function TicketDialog({ card, activeRelease, previousRelease, onClose }: { card:
               <div className="ticket-proof-v2">
                 <small>POLICY</small>
                 <b>{card.policy?.ruleId ?? (promoted ? "VERIFIED" : "PENDING")}</b>
-                <p>{card.policy?.publicReason ?? (promoted ? "This release passed the trusted promotion path." : "No policy decision has been recorded yet.")}</p>
-                {card.policy?.evidence.map((item) => <span key={item}>↳ {item}</span>)}
+                <p>{publicUiText(card.policy?.publicReason) || (promoted ? "This release passed the trusted promotion path." : "No policy decision has been recorded yet.")}</p>
+                {card.policy?.evidence.map((item) => <span key={item}>↳ {publicUiText(item)}</span>)}
               </div>
-              <div className="ticket-proof-v2"><small>TESTS & BUILD</small><b>{card.testSummary ?? (promoted ? "Release checks passed" : stopped ? "Candidate was not eligible for promotion" : "Verification has not completed")}</b></div>
+              <div className="ticket-proof-v2"><small>TESTS & BUILD</small><b>{publicUiText(card.testSummary) || (promoted ? "Release checks passed" : stopped ? "Candidate was not eligible for promotion" : "Verification has not completed")}</b></div>
               <div className="ticket-files-v2"><small>FILES CHANGED</small>{card.files?.length ? card.files.map((file) => <span key={file}>EDIT · {file}</span>) : <span>{promoted ? "BASELINE · No file list recorded" : "NO PROMOTED FILES"}</span>}</div>
               <div className="ticket-version-meta-v2"><span>COMMIT</span><b>{releaseCommit?.slice(0, 10) ?? "NONE"}</b><span>ACTIVATED</span><b>{promoted ? formatTicketDate(releaseActivatedAt) : "NEVER"}</b></div>
             </section>

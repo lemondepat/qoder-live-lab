@@ -8,7 +8,8 @@ export async function GET(request: Request) {
   return NextResponse.json(snapshot, {
     headers: {
       ...corsHeaders(request),
-      "Cache-Control": "public, s-maxage=1, stale-while-revalidate=2",
+      "Cache-Control": "public, max-age=0, s-maxage=15, stale-if-error=60",
+      "Vercel-CDN-Cache-Control": "public, s-maxage=15, stale-if-error=60",
     },
   });
 }

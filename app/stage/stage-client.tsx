@@ -1,8 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { OPENING_RELEASE_VERSION, type BoardSnapshot, type ChangeRequest } from "@qoder-live-lab/contracts";
 import { QRCodeSVG } from "qrcode.react";
+import { publicUiText } from "@/lib/public-copy";
 import { isRecentBlockedEvent, STAGE_BLOCKED_DURATION_MS } from "@/lib/stage-events";
 
 export function StageClient() {
@@ -15,7 +17,7 @@ export function StageClient() {
   useEffect(() => {
     let active = true;
     const load = async () => {
-      const next = await fetch("/api/board", { cache: "no-store" }).then((response) => response.json()) as BoardSnapshot;
+      const next = await fetch("/api/board").then((response) => response.json()) as BoardSnapshot;
       if (!active) return;
       setBoard(next);
       const latest = next.requests.find((item) => item.status === "blocked" || item.status === "rejected");
@@ -30,23 +32,38 @@ export function StageClient() {
       }
     };
     load().catch(() => undefined);
-    const timer = window.setInterval(() => load().catch(() => undefined), 2000);
+    const timer = window.setInterval(() => load().catch(() => undefined), 20_000);
     return () => { active = false; window.clearInterval(timer); window.clearTimeout(hideBlockedTimer.current); };
   }, []);
 
   const release = board?.system.activeRelease;
   const activeRequest = board?.requests.find((item) => item.id === board.system.activeRequestId);
+  const releaseRequest = board?.requests.find((item) => item.id === release?.requestId);
+  const displayedRequest = activeRequest ?? releaseRequest;
+  const stagePreviewUrl = process.env.NODE_ENV === "development" ? "/showcase" : release?.previewUrl || "/showcase";
   return (
     <main className="stage-shell">
       <header className="stage-bar">
-        <div className="stage-brand"><span className="qoder-brand-icon" aria-hidden="true" /><div><b>Qoder Live Lab</b><small>Qoder builds · verifies · deploys</small></div></div>
-        <div className="stage-now"><span>{stageStatusLabel(activeRequest)}</span><strong>{activeRequest?.title ?? release?.requirement ?? "Hong Kong market dashboard"}</strong></div>
-        <div className="stage-version"><div className="stage-qr"><QRCodeSVG value={process.env.NEXT_PUBLIC_SITE_URL || "https://qoder.com"} size={42} bgColor="transparent" fgColor="#f4f1e9" /><span>SCAN<br />TO BUILD</span></div><i />LIVE <b>{release?.version ?? OPENING_RELEASE_VERSION}</b></div>
+        <div className="stage-brand" aria-label="Qoder Live Lab">
+          <Image src="/qoder-line.png" alt="Qoder" width={150} height={39} priority />
+          <b>Live Lab</b>
+        </div>
+        <div className="stage-now">
+          <span>{stageStatusLabel(activeRequest)} <em>· BY {displayedRequest?.author ?? "Qoder Live Lab"}</em></span>
+          <strong>{publicUiText(displayedRequest?.title ?? release?.requirement) || "Hong Kong market dashboard"}</strong>
+        </div>
+        <div className="stage-version">
+          <div className="stage-qr">
+            <span>SCAN<br />TO BUILD</span>
+            <QRCodeSVG value={process.env.NEXT_PUBLIC_SITE_URL || "https://qoder.com"} size={42} bgColor="transparent" fgColor="#f4f1e9" />
+          </div>
+          <div className="stage-live"><i /><span>LIVE</span><b>{release?.version ?? OPENING_RELEASE_VERSION}</b></div>
+        </div>
       </header>
-      <div className="stage-frame-wrap" key={release?.previewUrl}>
-        <iframe title="Current verified market dashboard" src={release?.previewUrl || "/showcase"} sandbox="allow-scripts allow-pointer-lock allow-same-origin" />
+      <div className="stage-frame-wrap" key={stagePreviewUrl}>
+        <iframe title="Current verified market dashboard" src={stagePreviewUrl} sandbox="allow-scripts allow-pointer-lock allow-same-origin" />
       </div>
-      {blocked && <div className="stage-blocked" role="status"><span>×</span><div><b>CHANGE BLOCKED · {blocked.policy?.ruleId ?? "POLICY"}</b><strong>{blocked.policy?.publicReason ?? "Candidate did not pass the guardrails."}</strong><small>0 files promoted · Live version remains {release?.version ?? OPENING_RELEASE_VERSION}</small></div></div>}
+      {blocked && <div className="stage-blocked" role="status"><span>×</span><div><b>CHANGE BLOCKED · {blocked.policy?.ruleId ?? "POLICY"}</b><strong>{publicUiText(blocked.policy?.publicReason) || "Candidate did not pass the guardrails."}</strong><small>0 files promoted · Live version remains {release?.version ?? OPENING_RELEASE_VERSION}</small></div></div>}
     </main>
   );
 }

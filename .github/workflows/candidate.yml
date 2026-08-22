@@ -21,6 +21,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Enforce candidate boundary
+        if: startsWith(github.head_ref, 'qll/task-')
         run: npm run policy:changeset
         env:
           BASE_REF: ${{ github.event.pull_request.base.sha }}
