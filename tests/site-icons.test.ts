@@ -54,7 +54,6 @@ test("every visible product brand mark uses the Qoder icon asset", async () => {
   const sources = await Promise.all([
     readFile(new URL("../app/stage/stage-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/ops/ops-client.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/repo-guide.tsx", import.meta.url), "utf8"),
     readFile(new URL("../apps/showcase/src/Showcase.tsx", import.meta.url), "utf8"),
   ]);
 

@@ -29,9 +29,11 @@ test("the public experience is a fixed-screen nav switcher", async () => {
   assert.doesNotMatch(page, /href="\/releases"/);
   assert.doesNotMatch(page, /scrollIntoView/);
   assert.doesNotMatch(page, /page-proof-v2/);
+  assert.doesNotMatch(page, /RepoGuide|repo-guide/);
 
   assert.match(styles, /body:has\(\.public-v2\).*overflow:hidden/);
   assert.doesNotMatch(styles, /page-proof-v2/);
+  assert.doesNotMatch(styles, /ask-launcher|ask-drawer/);
   assert.match(styles, /\.public-v2 \[hidden\] \{ display:none!important; \}/);
   assert.match(styles, /\.build-page-v2 \{[\s\S]*?height:calc\(100dvh - 72px\);[\s\S]*?overflow:hidden;/);
   assert.match(styles, /\.pipeline-page-v2 \{ height:calc\(100dvh - 72px\);[\s\S]*?grid-template-rows:minmax\(0,1fr\);[\s\S]*?padding:0;[\s\S]*?overflow:hidden;/);

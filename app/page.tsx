@@ -13,7 +13,6 @@ import {
 } from "@qoder-live-lab/contracts";
 import { REHEARSAL_FEATURES } from "@qoder-live-lab/contracts/features";
 import { GUARDRAIL_CHALLENGES } from "@qoder-live-lab/contracts/policy";
-import { RepoGuide } from "./repo-guide";
 
 const fallback: BoardSnapshot = {
   generatedAt: new Date().toISOString(),
@@ -229,7 +228,6 @@ export default function Home() {
       </section>
 
       {selectedTicket && <TicketDialog card={selectedTicket} activeRelease={board.system.activeRelease} previousRelease={board.system.previousRelease} onClose={() => setSelectedTicketId(null)} />}
-      <RepoGuide />
     </main>
   );
 }
