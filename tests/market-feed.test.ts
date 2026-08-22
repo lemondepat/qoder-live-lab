@@ -113,6 +113,7 @@ test("builds a public snapshot with indices separated from equities", () => {
   assert.equal(snapshot.session, "afternoon");
   assert.equal(snapshot.indices[0]?.symbol, "HSI");
   assert.equal(snapshot.quotes[0]?.symbol, "0700");
+  assert.deepEqual(snapshot.quotes[0]?.intraday, []);
   assert.equal(snapshot.sequence, 4);
 });
 

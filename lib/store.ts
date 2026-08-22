@@ -8,6 +8,8 @@ import type {
   BoardSnapshot,
   ChangeRequest,
   CreateRequestInput,
+  MarketIntradaySnapshot,
+  MarketQuoteSnapshot,
   MarketSnapshot,
   PolicyDecision,
   RequestEvent,
@@ -18,7 +20,15 @@ import { TERMINAL_STATUSES } from "@qoder-live-lab/contracts";
 import { evaluateInput } from "@qoder-live-lab/contracts/policy";
 
 type StoredRequest = ChangeRequest & { idempotencyKey: string };
-type MemoryStore = { requests: StoredRequest[]; system: SystemState; market: MarketSnapshot; initialized: boolean };
+type MemoryDemand = { symbol: string; vendorSymbol: string; requestedAt: string; claimedAt?: string };
+type MemoryStore = {
+  requests: StoredRequest[];
+  system: SystemState;
+  market: MarketSnapshot;
+  intraday: Map<string, MarketIntradaySnapshot>;
+  marketDemands: Map<string, MemoryDemand>;
+  initialized: boolean;
+};
 
 const now = () => new Date().toISOString();
 const baselinePreviewUrl = process.env.BASELINE_PREVIEW_URL || "https://qoder-live-lab-canvas-arlg3imwb-qt-eam1.vercel.app";
@@ -83,7 +93,14 @@ function makeSeed(id: string, title: string, author: string, status: RequestStat
 }
 
 const globalStore = globalThis as typeof globalThis & { __qllStore?: MemoryStore };
-const memory = globalStore.__qllStore ??= { requests: structuredClone(seededRequests), system: structuredClone(defaultSystem), market: structuredClone(defaultMarketSnapshot), initialized: true };
+const memory = globalStore.__qllStore ??= {
+  requests: structuredClone(seededRequests),
+  system: structuredClone(defaultSystem),
+  market: structuredClone(defaultMarketSnapshot),
+  intraday: new Map(),
+  marketDemands: new Map(),
+  initialized: true,
+};
 let schemaReady: Promise<void> | undefined;
 
 function databaseUrl() {
@@ -111,6 +128,19 @@ async function ensureSchema() {
       id integer PRIMARY KEY DEFAULT 1 CHECK (id = 1),
       payload jsonb NOT NULL,
       updated_at timestamptz NOT NULL DEFAULT now()
+    )`;
+    await sql`CREATE TABLE IF NOT EXISTS qll_market_intraday (
+      vendor_symbol text PRIMARY KEY,
+      symbol text NOT NULL,
+      trading_day text NOT NULL,
+      payload jsonb NOT NULL,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`;
+    await sql`CREATE TABLE IF NOT EXISTS qll_market_intraday_demand (
+      vendor_symbol text PRIMARY KEY,
+      symbol text NOT NULL,
+      requested_at timestamptz NOT NULL DEFAULT now(),
+      claimed_at timestamptz
     )`;
     const existing = await sql`SELECT count(*)::int AS count FROM qll_requests`;
     const count = Number(existing[0]?.count ?? 0);
@@ -200,23 +230,143 @@ export async function getMarketSnapshot(): Promise<MarketSnapshot> {
         return (rows[0]?.payload as MarketSnapshot | undefined) ?? defaultMarketSnapshot;
       })()
     : memory.market;
-  if (snapshot.source === "longbridge" && Date.now() - new Date(snapshot.receivedAt).getTime() > 45_000) {
-    return { ...snapshot, status: "stale" };
+  const compact = compactMarketSnapshot(snapshot);
+  if (compact.source === "longbridge" && Date.now() - new Date(compact.receivedAt).getTime() > 45_000) {
+    return { ...compact, status: "stale" };
   }
-  return snapshot;
+  return compact;
 }
 
 export async function writeMarketSnapshot(snapshot: MarketSnapshot): Promise<MarketSnapshot> {
+  const embeddedIntraday = [...snapshot.indices, ...snapshot.quotes]
+    .map((quote) => quote.intraday.length ? quoteIntradaySnapshot(quote, snapshot.sequence, snapshot.receivedAt) : undefined)
+    .filter((item): item is MarketIntradaySnapshot => Boolean(item));
+  const compact = compactMarketSnapshot(snapshot);
   const url = databaseUrl();
   if (!url) {
-    memory.market = structuredClone(snapshot);
-    return snapshot;
+    memory.market = structuredClone(compact);
+    await writeMarketIntradaySnapshots(embeddedIntraday);
+    return compact;
   }
   await ensureSchema();
   await neon(url)`INSERT INTO qll_market_snapshot (id, payload, updated_at)
-    VALUES (1, ${JSON.stringify(snapshot)}::jsonb, now())
+    VALUES (1, ${JSON.stringify(compact)}::jsonb, now())
     ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()`;
-  return snapshot;
+  await writeMarketIntradaySnapshots(embeddedIntraday);
+  return compact;
+}
+
+export function compactMarketSnapshot(snapshot: MarketSnapshot): MarketSnapshot {
+  return {
+    ...snapshot,
+    indices: snapshot.indices.map((quote) => ({ ...quote, intraday: [] })),
+    quotes: snapshot.quotes.map((quote) => ({ ...quote, intraday: [] })),
+  };
+}
+
+function quoteIntradaySnapshot(quote: MarketQuoteSnapshot, sequence: number, receivedAt: string): MarketIntradaySnapshot {
+  const timestamp = quote.intraday.at(-1)?.timestamp ?? quote.timestamp;
+  return {
+    symbol: quote.symbol,
+    vendorSymbol: quote.vendorSymbol,
+    tradingDay: new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Hong_Kong",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(timestamp)),
+    receivedAt,
+    sequence,
+    points: quote.intraday,
+  };
+}
+
+export async function getMarketIntradaySnapshot(vendorSymbol: string): Promise<MarketIntradaySnapshot | undefined> {
+  const url = databaseUrl();
+  if (!url) return memory.intraday.get(vendorSymbol);
+  await ensureSchema();
+  const rows = await neon(url)`SELECT payload FROM qll_market_intraday WHERE vendor_symbol = ${vendorSymbol} LIMIT 1`;
+  return rows[0]?.payload as MarketIntradaySnapshot | undefined;
+}
+
+export async function writeMarketIntradaySnapshots(snapshots: MarketIntradaySnapshot[]) {
+  if (!snapshots.length) return;
+  const latest = new Map(snapshots.map((snapshot) => [snapshot.vendorSymbol, snapshot]));
+  const url = databaseUrl();
+  if (!url) {
+    for (const snapshot of latest.values()) {
+      memory.intraday.set(snapshot.vendorSymbol, structuredClone(snapshot));
+      memory.marketDemands.delete(snapshot.vendorSymbol);
+    }
+    return;
+  }
+  await ensureSchema();
+  const rows = [...latest.values()].map((snapshot) => ({
+    vendor_symbol: snapshot.vendorSymbol,
+    symbol: snapshot.symbol,
+    trading_day: snapshot.tradingDay,
+    payload: snapshot,
+  }));
+  const sql = neon(url);
+  await sql`INSERT INTO qll_market_intraday (vendor_symbol, symbol, trading_day, payload, updated_at)
+    SELECT vendor_symbol, symbol, trading_day, payload, now()
+    FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb)
+      AS incoming(vendor_symbol text, symbol text, trading_day text, payload jsonb)
+    ON CONFLICT (vendor_symbol) DO UPDATE SET
+      symbol = EXCLUDED.symbol,
+      trading_day = EXCLUDED.trading_day,
+      payload = EXCLUDED.payload,
+      updated_at = now()`;
+  await sql`DELETE FROM qll_market_intraday_demand
+    WHERE vendor_symbol IN (SELECT jsonb_array_elements_text(${JSON.stringify([...latest.keys()])}::jsonb))`;
+}
+
+export async function enqueueMarketIntradayDemand(symbol: string, vendorSymbol: string) {
+  const url = databaseUrl();
+  if (!url) {
+    const existing = memory.marketDemands.get(vendorSymbol);
+    if (!existing || Date.now() - new Date(existing.requestedAt).getTime() >= 15_000) {
+      memory.marketDemands.set(vendorSymbol, { symbol, vendorSymbol, requestedAt: now() });
+    }
+    return;
+  }
+  await ensureSchema();
+  await neon(url)`INSERT INTO qll_market_intraday_demand (vendor_symbol, symbol, requested_at, claimed_at)
+    VALUES (${vendorSymbol}, ${symbol}, now(), NULL)
+    ON CONFLICT (vendor_symbol) DO UPDATE SET
+      symbol = EXCLUDED.symbol,
+      requested_at = now(),
+      claimed_at = NULL
+    WHERE qll_market_intraday_demand.requested_at < now() - interval '15 seconds'`;
+}
+
+export async function claimMarketIntradayDemands(limit = 5): Promise<string[]> {
+  const boundedLimit = Math.max(1, Math.min(20, Math.trunc(limit)));
+  const url = databaseUrl();
+  if (!url) {
+    const due = [...memory.marketDemands.values()]
+      .filter((item) => !item.claimedAt || Date.now() - new Date(item.claimedAt).getTime() >= 30_000)
+      .sort((left, right) => left.requestedAt.localeCompare(right.requestedAt))
+      .slice(0, boundedLimit);
+    const claimedAt = now();
+    for (const item of due) memory.marketDemands.set(item.vendorSymbol, { ...item, claimedAt });
+    return due.map((item) => item.vendorSymbol);
+  }
+  await ensureSchema();
+  const rows = await neon(url)`WITH due AS (
+      SELECT vendor_symbol
+      FROM qll_market_intraday_demand
+      WHERE claimed_at IS NULL OR claimed_at < now() - interval '30 seconds'
+      ORDER BY requested_at ASC
+      LIMIT ${boundedLimit}
+      FOR UPDATE SKIP LOCKED
+    )
+    UPDATE qll_market_intraday_demand AS demand
+    SET claimed_at = now()
+    FROM due
+    WHERE demand.vendor_symbol = due.vendor_symbol
+    RETURNING demand.vendor_symbol`;
+  return rows.map((row) => String(row.vendor_symbol));
 }
 
 export async function createRequest(input: CreateRequestInput): Promise<ChangeRequest> {

@@ -1,4 +1,4 @@
-import type { ChangeRequest, MarketSnapshot, PolicyDecision } from "@qoder-live-lab/contracts";
+import type { ChangeRequest, MarketIntradaySnapshot, MarketSnapshot, PolicyDecision } from "@qoder-live-lab/contracts";
 import type { RunnerConfig } from "./config";
 
 export class ControlClient {
@@ -11,6 +11,10 @@ export class ControlClient {
   async heartbeat() { await this.post("/api/runner/heartbeat", {}); }
 
   async market(snapshot: MarketSnapshot) { await this.post("/api/runner/market", snapshot); }
+
+  async marketIntraday(snapshots: MarketIntradaySnapshot[]) { await this.post("/api/runner/market/intraday", { snapshots }); }
+
+  async marketDemand(): Promise<{ symbols: string[] }> { return this.post("/api/runner/market/demand", {}); }
 
   async event(requestId: string, kind: "status" | "agent" | "test" | "policy" | "release", message: string, extra: Record<string, unknown> = {}) {
     await this.post("/api/runner/event", { requestId, kind, message: sanitize(message), ...extra });

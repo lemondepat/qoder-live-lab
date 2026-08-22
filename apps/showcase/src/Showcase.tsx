@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useMarketFeed } from "./market-feed";
+import { useMarketFeed, useMarketIntraday } from "./market-feed";
 import type { MarketIndex, MarketQuote } from "./market-data";
 import { computeMarketPulse } from "./market-pulse";
 import { VolatilityWeatherMap } from "./volatility-storm-map";
@@ -59,7 +59,7 @@ export function Showcase() {
       <section className="index-row">
         {market.indices.map((index) => <article key={`${index.symbol}-${market.sequence}`}><div><span>{index.symbol}</span><small>{index.label}</small></div><strong>{index.value}</strong><b className={index.change >= 0 ? "up" : "down"}>{index.change >= 0 ? "+" : ""}{index.change.toFixed(2)}%</b></article>)}
       </section>
-      <IntradayPanel indices={market.indices} quotes={quotes} sequence={market.sequence} sessionLabel={sessionLabel} session={market.session} marketTimestamp={market.marketTimestamp} status={market.status} source={market.source} />
+      <IntradayPanel indices={market.indices} quotes={quotes} universeQuotes={market.universeQuotes} sequence={market.sequence} sessionLabel={sessionLabel} session={market.session} marketTimestamp={market.marketTimestamp} status={market.status} source={market.source} />
       <MarketPulseStrip quotes={quotes} />
       <div className="watchlist-row"><span>WATCHLIST / {quotes.length}</span><ul className="tone-legend" aria-label="Change color legend"><li className="gain"><i />GAIN</li><li className="loss"><i />LOSS</li><li className="flat"><i />FLAT</li></ul></div>
       <SectorHeatmapBoard quotes={quotes} sessionLabel={sessionLabel} clock={clock} status={market.status} mode={sizing} onMode={setSizing} />
@@ -70,23 +70,25 @@ export function Showcase() {
 
 const tickTrack = new Map<string, { key: string; points: IntradayPoint[] }>();
 
-function IntradayPanel({ indices, quotes, sequence, sessionLabel, session, marketTimestamp, status, source }: { indices: MarketIndex[]; quotes: MarketQuote[]; sequence: number; sessionLabel: string; session: string; marketTimestamp: string; status: string; source: string }) {
+function IntradayPanel({ indices, quotes, universeQuotes, sequence, sessionLabel, session, marketTimestamp, status, source }: { indices: MarketIndex[]; quotes: MarketQuote[]; universeQuotes: MarketQuote[]; sequence: number; sessionLabel: string; session: string; marketTimestamp: string; status: string; source: string }) {
   const [scope, setScope] = useState<IntradayScope>("index");
   const [focusByScope, setFocusByScope] = useState<Record<IntradayScope, string>>({ index: "HSI", stock: "" });
   const [query, setQuery] = useState("");
   const [lookup, setLookup] = useState<SymbolLookup>({ state: "idle" });
   const [history, setHistory] = useState<string[]>([]);
-  const universe = [...indices.map(indexInstrument), ...quotes.map(stockInstrument)];
-  const instruments = scopeInstruments(scope, indices, quotes);
+  const universe = [...indices.map(indexInstrument), ...universeQuotes.map(stockInstrument)];
+  const instruments = scopeInstruments(scope, indices, universeQuotes);
+  const quickInstruments = scopeInstruments(scope, indices, quotes);
   const active = resolveActive(instruments, focusByScope[scope]);
   const activeSymbol = active?.symbol ?? focusByScope[scope];
+  const requestedIntraday = useMarketIntraday(activeSymbol);
   const observed = active?.last ?? null;
   const stamped = new Date(marketTimestamp);
   const instant = Number.isNaN(stamped.getTime()) ? new Date() : stamped;
   const tradingDay = hongKongTradingDay(instant);
   const minute = clampToSession(hongKongMinute(instant));
   const trackScope = observationScope(source, tradingDay, `${scope}:${activeSymbol}`);
-  const providerPoints = trustedIntradaySeries(active?.intraday ?? [], tradingDay);
+  const providerPoints = trustedIntradaySeries(requestedIntraday?.points ?? active?.intraday ?? [], tradingDay);
   const hasOfficialMinutes = providerPoints.length > 0;
 
   const setFocus = (symbol: string) => setFocusByScope((current) => ({ ...current, [scope]: symbol }));
@@ -139,7 +141,7 @@ function IntradayPanel({ indices, quotes, sequence, sessionLabel, session, marke
     </div>
     <div className="symbol-search">
       <form className="symbol-form" role="search" onSubmit={(event) => { event.preventDefault(); submitQuery(); }}>
-        <label htmlFor="symbol-input">CHART ANY CODE</label>
+        <label htmlFor="symbol-input">CHART 100 HK STOCKS</label>
         <div className="symbol-field">
           <input id="symbol-input" type="text" inputMode="text" autoComplete="off" spellCheck={false} placeholder="e.g. 700, 1810.HK, XIAOMI, HSTECH"
             value={query} aria-describedby="symbol-help"
@@ -148,7 +150,7 @@ function IntradayPanel({ indices, quotes, sequence, sessionLabel, session, marke
           {typed.length > 0 && <em className="symbol-normalized">→ {typed}</em>}
           <button type="submit">CHART</button>
         </div>
-        <small id="symbol-help">Code, name or sector · matched against {universe.length} trusted Longbridge instruments</small>
+        <small id="symbol-help">Code, name or sector · matched against {universe.length} trusted market instruments</small>
       </form>
       {hints.length > 0 && <ul className="symbol-hints" aria-label="Matching instruments">
         {hints.map((hint) => <li key={`${hint.kind}-${hint.symbol}`}>
@@ -172,7 +174,7 @@ function IntradayPanel({ indices, quotes, sequence, sessionLabel, session, marke
         {active?.meta && <em className="intraday-meta">{active.meta}</em>}
       </div>
       <div className="intraday-switch" role="group" aria-label={`Select ${scopeNoun.toLowerCase()}`}>
-        {instruments.map((instrument) => <button key={instrument.symbol} type="button" className={instrument.symbol === activeSymbol ? "is-active" : ""} aria-pressed={instrument.symbol === activeSymbol} onClick={() => setFocus(instrument.symbol)}>
+        {quickInstruments.map((instrument) => <button key={instrument.symbol} type="button" className={instrument.symbol === activeSymbol ? "is-active" : ""} aria-pressed={instrument.symbol === activeSymbol} onClick={() => setFocus(instrument.symbol)}>
           <b>{instrument.symbol}</b><i className={instrument.change >= 0 ? "up" : "down"}>{instrument.change >= 0 ? "+" : ""}{instrument.change.toFixed(2)}%</i>
         </button>)}
       </div>

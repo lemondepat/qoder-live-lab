@@ -40,7 +40,7 @@ export function SectorHeatmapBoard({ quotes, sessionLabel, clock, status, mode, 
     </header>
 
     {board.length === 0
-      ? <div className="sector-board-empty">Waiting for the trusted Longbridge snapshot — sector tiles appear as soon as the first quotes arrive.</div>
+      ? <div className="sector-board-empty">Waiting for the trusted market snapshot — sector tiles appear as soon as the first quotes arrive.</div>
       : <div className={`sector-board-grid mode-${mode}`}>
           {board.map((block) => <SectorBlockTile key={block.sector} block={block} mode={mode} live={live} />)}
         </div>}

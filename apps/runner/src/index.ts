@@ -10,7 +10,12 @@ import { runQca } from "./qca-provider";
 const config = loadConfig();
 const control = new ControlClient(config);
 let stopping = false;
-const marketFeed = startMarketFeed(config, (snapshot) => control.market(snapshot));
+const marketFeed = startMarketFeed(
+  config,
+  (snapshot) => control.market(snapshot),
+  (snapshots) => control.marketIntraday(snapshots),
+);
+if (config.marketFeedProvider === "longbridge") void pollMarketDemands();
 
 process.on("SIGINT", stop);
 process.on("SIGTERM", stop);
@@ -27,6 +32,18 @@ async function main() {
       process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     }
     await sleep(config.pollMs);
+  }
+}
+
+async function pollMarketDemands() {
+  while (!stopping) {
+    try {
+      const demand = await control.marketDemand();
+      if (demand.symbols.length) marketFeed.requestIntraday(demand.symbols);
+    } catch (error) {
+      process.stderr.write(`Market demand unavailable · ${error instanceof Error ? error.message : String(error)}\n`);
+    }
+    await sleep(Math.max(1_000, config.pollMs));
   }
 }
 

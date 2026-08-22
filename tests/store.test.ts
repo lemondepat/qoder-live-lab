@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { OPENING_RELEASE_VERSION } from "../packages/contracts/src/index";
-import { createBoundaryChallenge, createRequest, finishRequest, getBoard, getMarketSnapshot, resetOpeningRelease, setSystem, writeMarketSnapshot } from "../lib/store";
+import { claimMarketIntradayDemands, createBoundaryChallenge, createRequest, enqueueMarketIntradayDemand, finishRequest, getBoard, getMarketIntradaySnapshot, getMarketSnapshot, resetOpeningRelease, setSystem, writeMarketIntradaySnapshots, writeMarketSnapshot } from "../lib/store";
 
 // This suite is intentionally memory-only even when it is invoked directly from
 // an operator machine that has production credentials in its environment.
@@ -78,7 +78,25 @@ test("persists a sanitized Longbridge snapshot for the public read path", async 
   assert.equal(snapshot.source, "longbridge");
   assert.equal(snapshot.sequence, 7);
   assert.equal(snapshot.quotes[0]?.last, 448.6);
-  assert.equal(snapshot.quotes[0]?.intraday[0]?.price, 448.6);
+  assert.deepEqual(snapshot.quotes[0]?.intraday, []);
+  assert.equal((await getMarketIntradaySnapshot("700.HK"))?.points[0]?.price, 448.6);
+});
+
+test("deduplicates public intraday demand and clears it after the runner publishes", async () => {
+  await enqueueMarketIntradayDemand("1810", "1810.HK");
+  await enqueueMarketIntradayDemand("1810", "1810.HK");
+  assert.deepEqual(await claimMarketIntradayDemands(5), ["1810.HK"]);
+  assert.deepEqual(await claimMarketIntradayDemands(5), []);
+  const timestamp = new Date().toISOString();
+  await writeMarketIntradaySnapshots([{
+    symbol: "1810",
+    vendorSymbol: "1810.HK",
+    tradingDay: timestamp.slice(0, 10),
+    receivedAt: timestamp,
+    sequence: 9,
+    points: [{ timestamp, price: 55.2, volume: 100, turnover: 5_520 }],
+  }]);
+  assert.equal((await getMarketIntradaySnapshot("1810.HK"))?.points[0]?.price, 55.2);
 });
 
 test("keeps a twenty-second market cadence healthy and flags missed snapshots", async () => {

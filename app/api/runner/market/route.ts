@@ -18,6 +18,7 @@ const quoteSchema = z.object({
   sector: z.string().min(1).max(48),
   kind: z.enum(["index", "equity"]),
   currency: z.string().min(3).max(4),
+  featured: z.boolean().optional(),
   last: z.number().finite().nonnegative(),
   prevClose: z.number().finite().nonnegative(),
   open: z.number().finite().nonnegative(),
@@ -41,7 +42,7 @@ const snapshotSchema = z.object({
   marketTimestamp: z.string().datetime(),
   sequence: z.number().int().nonnegative(),
   indices: z.array(quoteSchema).max(8),
-  quotes: z.array(quoteSchema).min(1).max(24),
+  quotes: z.array(quoteSchema).min(1).max(100),
 });
 
 export async function POST(request: Request) {
