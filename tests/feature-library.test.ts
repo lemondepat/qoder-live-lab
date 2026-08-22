@@ -5,9 +5,10 @@ import { REHEARSAL_FEATURES } from "@qoder-live-lab/contracts/features";
 
 const read = (path: string) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("the prebuilt feature library is dormant in the opening showcase", async () => {
-  const [showcase, main, runner, preview] = await Promise.all([
+test("the prebuilt feature library and rich dashboard remain dormant behind the minimal opening showcase", async () => {
+  const [showcase, richShowcase, main, runner, preview] = await Promise.all([
     read("apps/showcase/src/Showcase.tsx"),
+    read("apps/showcase/src/RichShowcase.tsx"),
     read("apps/showcase/src/main.tsx"),
     read("apps/runner/src/index.ts"),
     read("apps/runner/src/git-pipeline.ts"),
@@ -17,7 +18,9 @@ test("the prebuilt feature library is dormant in the opening showcase", async ()
   assert.doesNotMatch(main, /feature-library|feature-pack/);
   assert.doesNotMatch(runner, /materializeFeaturePack|presetFeatureId/);
   assert.doesNotMatch(preview, /presetFeatureId|searchParams\.set\("edition"/);
-  assert.match(showcase, /className="market-shell edition-baseline"/);
+  assert.match(showcase, /className="minimal-hsi"/);
+  assert.doesNotMatch(main, /RichShowcase/);
+  assert.match(richShowcase, /className="market-shell edition-baseline"/);
 });
 
 test("all five dormant accelerators are exported and documented for semantic matching", async () => {

@@ -58,7 +58,7 @@ test("every visible product brand mark uses an official Qoder asset", async () =
   const [stage, ...iconSources] = await Promise.all([
     readFile(new URL("../app/stage/stage-client.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/ops/ops-client.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../apps/showcase/src/Showcase.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../apps/showcase/src/RichShowcase.tsx", import.meta.url), "utf8"),
   ]);
 
   assert.match(stage, /qoder-line\.png/);
@@ -80,10 +80,10 @@ test("every visible product brand mark uses an official Qoder asset", async () =
   }
 });
 
-test("the Stage and market canvas share the Qoder release narrative", async () => {
+test("the Stage and archived rich canvas retain the Qoder release narrative", async () => {
   const [stage, showcase] = await Promise.all([
     readFile(new URL("../app/stage/stage-client.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../apps/showcase/src/Showcase.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../apps/showcase/src/RichShowcase.tsx", import.meta.url), "utf8"),
   ]);
 
   assert.match(stage, /qoder-line\.png/);

@@ -4,6 +4,8 @@ This repository contains five prebuilt visual accelerators under `apps/showcase/
 
 The visitor requirement remains authoritative within the boundaries in `AGENTS.md`. These are starting points, not fixed editions and not hidden deployment switches.
 
+The last complete financial terminal is also preserved, disconnected from the entry point, in `apps/showcase/src/RichShowcase.tsx` with its original `showcase.css`. Treat it as a reference library: reuse or adapt its components when they fit a ticket, but never reconnect the whole archived dashboard automatically. The active `Showcase.tsx` is intentionally only the HSI baseline.
+
 ## Semantic matches
 
 | Audience intent | Accelerator source | Export | Trusted props |
@@ -18,7 +20,7 @@ Shared visual primitives live in `apps/showcase/src/feature-library/shared.tsx`;
 
 ## Required workflow
 
-1. Read the audience ticket, the current `Showcase.tsx`, `showcase.css`, `market-data.ts` types, and `docs/qca/market-data-capabilities.md`.
+1. Read the audience ticket, the current `Showcase.tsx`, `minimal-showcase.css`, `market-data.ts` types, and `docs/qca/market-data-capabilities.md`. Consult `RichShowcase.tsx`, `showcase.css`, and the accelerator library only as dormant references.
 2. Decide whether the ticket has a strong or partial semantic match to one accelerator above.
 3. For a strong match, import the specific component into the candidate and adapt its composition, copy, hierarchy, styling, and supporting code to satisfy the ticket. Do not merely expose the untouched accelerator.
 4. For a partial match, reuse only the useful primitives or visual idea and build the rest around the visitor's request.
