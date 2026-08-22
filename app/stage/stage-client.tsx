@@ -44,7 +44,7 @@ export function StageClient() {
         <div className="stage-version"><div className="stage-qr"><QRCodeSVG value={process.env.NEXT_PUBLIC_SITE_URL || "https://qoder.com"} size={42} bgColor="transparent" fgColor="#f4f1e9" /><span>SCAN<br />TO BUILD</span></div><i />LIVE <b>{release?.version ?? OPENING_RELEASE_VERSION}</b></div>
       </header>
       <div className="stage-frame-wrap" key={release?.previewUrl}>
-        <iframe title="Current verified market dashboard" src={release?.previewUrl || "/showcase"} sandbox="allow-scripts allow-pointer-lock" />
+        <iframe title="Current verified market dashboard" src={release?.previewUrl || "/showcase"} sandbox="allow-scripts allow-pointer-lock allow-same-origin" />
       </div>
       {blocked && <div className="stage-blocked" role="status"><span>×</span><div><b>CHANGE BLOCKED · {blocked.policy?.ruleId ?? "POLICY"}</b><strong>{blocked.policy?.publicReason ?? "Candidate did not pass the guardrails."}</strong><small>0 files promoted · Live version remains {release?.version ?? OPENING_RELEASE_VERSION}</small></div></div>}
     </main>

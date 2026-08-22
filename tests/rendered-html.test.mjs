@@ -53,7 +53,10 @@ test("server-renders stage, release history, and operator routes", async () => {
   assert.equal(stage.status, 200);
   assert.equal(releases.status, 200);
   assert.equal(ops.status, 200);
-  assert.match(await stage.text(), /Current verified market dashboard/i);
+  const stageHtml = await stage.text();
+  assert.match(stageHtml, /Current verified market dashboard/i);
+  assert.match(stageHtml, /sandbox="allow-scripts allow-pointer-lock allow-same-origin"/i);
+  assert.doesNotMatch(stageHtml, /sandbox="[^"]*(allow-forms|allow-popups|allow-top-navigation)/i);
   assert.match(await releases.text(), /See what changed/i);
   assert.match(await ops.text(), /Trusted control plane/i);
 });
