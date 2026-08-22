@@ -74,3 +74,16 @@ test("every visible product brand mark uses the Qoder icon asset", async () => {
     await assert.rejects(access(new URL(`../public/${asset}`, import.meta.url)));
   }
 });
+
+test("the Stage and market canvas share the Qoder release narrative", async () => {
+  const [stage, showcase] = await Promise.all([
+    readFile(new URL("../app/stage/stage-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../apps/showcase/src/Showcase.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(stage, /Qoder builds · verifies · deploys/);
+  assert.match(stage, /QODER BUILDS/);
+  assert.match(stage, /QODER VERIFIES/);
+  assert.match(stage, /QODER DEPLOYS/);
+  assert.match(showcase, /Built · verified · deployed by Qoder/);
+});

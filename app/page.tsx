@@ -53,10 +53,11 @@ const fallback: BoardSnapshot = {
 };
 
 const pipelineLanes: { key: string; statuses: RequestStatus[]; label: string; eyebrow: string }[] = [
-  { key: "queued", statuses: ["queued"], label: "Queue", eyebrow: "Waiting" },
-  { key: "coding", statuses: ["coding"], label: "Building", eyebrow: "Qoder Cloud Agent" },
-  { key: "testing", statuses: ["testing", "deploying"], label: "Verifying", eyebrow: "Policy + tests" },
-  { key: "live", statuses: ["live"], label: "Shipped", eyebrow: "Verified releases" },
+  { key: "queued", statuses: ["queued"], label: "You Ask", eyebrow: "Audience queue" },
+  { key: "coding", statuses: ["coding"], label: "Qoder Builds", eyebrow: "Cloud Agent" },
+  { key: "testing", statuses: ["testing"], label: "Qoder Verifies", eyebrow: "Tests + guardrails" },
+  { key: "deploying", statuses: ["deploying"], label: "Qoder Deploys", eyebrow: "Trusted release" },
+  { key: "live", statuses: ["live"], label: "Live", eyebrow: "Verified release" },
   { key: "failed", statuses: ["rejected", "blocked", "failed", "cancelled"], label: "Failed Changes", eyebrow: "Not promoted" },
 ];
 
@@ -223,17 +224,16 @@ export default function Home() {
       <section className="pipeline-page-v2" id="pipeline" aria-labelledby="pipeline-heading" hidden={activePage !== "pipeline"}>
         <header className="pipeline-heading-v2">
           <div>
-            <p className="page-index-v2">02 / LIVE PIPELINE</p>
             <h2 id="pipeline-heading">Every change.<br /><em>Visible.</em></h2>
           </div>
           <div className="pipeline-signal-v2">
-            <span>AGENT SIGNAL</span>
-            <b>{activeRequest ? `${activeRequest.id} · ${activeRequest.status.toUpperCase()}` : "READY FOR THE NEXT IDEA"}</b>
+            <span>QODER SIGNAL</span>
+            <b>{activeRequest ? `${activeRequest.id} · ${publicStatusLabel(activeRequest.status)}` : "READY FOR THE NEXT IDEA"}</b>
             <small>{activeRequest?.events.at(-1)?.message ?? "Guardrails online · queue listening"}</small>
           </div>
           <div className="pipeline-meta-v2">
             <span>STABLE <b>{board.system.activeRelease.version}</b></span>
-            <span>{board.system.provider.toUpperCase()} PROVIDER</span>
+            <span>{board.system.provider === "qca" ? "QODER CLOUD AGENT" : "LOCAL QODER FALLBACK"}</span>
             <span>AUTO-REFRESH · 2S</span>
           </div>
           <span className="mobile-board-hint-v2">SWIPE COLUMNS <b>↔</b></span>
@@ -267,7 +267,7 @@ function PipelineLane({ lane, cards, onSelect }: { lane: (typeof pipelineLanes)[
 function RequestCard({ card, onSelect }: { card: ChangeRequest; onSelect: (id: string) => void }) {
   return (
     <button type="button" className={`pipeline-card-v2 status-${card.status}`} onClick={() => onSelect(card.id)} aria-haspopup="dialog">
-      <span className="pipeline-card-top-v2"><span>{card.id}</span><b>{card.status.toUpperCase()}</b></span>
+      <span className="pipeline-card-top-v2"><span>{card.id}</span><b>{publicStatusLabel(card.status)}</b></span>
       <strong className="pipeline-card-title-v2">{card.title}</strong>
       <span className="pipeline-card-requester-v2">Requested by {card.author}</span>
       <span className="pipeline-card-footer-v2"><span>{card.releaseVersion ?? card.testSummary ?? card.events.at(-1)?.message ?? "Awaiting evidence"}</span><b>↗</b></span>
@@ -293,7 +293,7 @@ function TicketDialog({ card, activeRelease, previousRelease, onClose }: { card:
       <section className={`ticket-modal-v2 status-${card.status}`} role="dialog" aria-modal="true" aria-labelledby="ticket-modal-heading">
         <header className="ticket-modal-header-v2">
           <div><span>TICKET / VERSION DETAIL</span><b>{card.id}</b></div>
-          <div><strong>{card.status.toUpperCase()}</strong><button ref={closeButtonRef} type="button" onClick={onClose} aria-label="Close ticket details">×</button></div>
+          <div><strong>{publicStatusLabel(card.status)}</strong><button ref={closeButtonRef} type="button" onClick={onClose} aria-label="Close ticket details">×</button></div>
         </header>
 
         <div className="ticket-modal-scroll-v2">
@@ -304,7 +304,7 @@ function TicketDialog({ card, activeRelease, previousRelease, onClose }: { card:
 
           <div className="ticket-modal-grid-v2">
             <section className="ticket-modal-panel-v2">
-              <header><span>CURRENT REQUEST</span><b>{card.status.toUpperCase()}</b></header>
+              <header><span>CURRENT REQUEST</span><b>{publicStatusLabel(card.status)}</b></header>
               <dl className="ticket-facts-v2">
                 <div><dt>LAST UPDATE</dt><dd>{formatTicketDate(card.updatedAt)}</dd></div>
                 <div><dt>AGENT</dt><dd>{card.qcaSessionId ? "QODER CLOUD AGENT" : card.source === "ops" ? "BOUNDARY CHALLENGE" : "QUEUE"}</dd></div>
@@ -312,7 +312,7 @@ function TicketDialog({ card, activeRelease, previousRelease, onClose }: { card:
                 <div><dt>FILES</dt><dd>{card.files?.length ?? 0} CHANGED</dd></div>
               </dl>
               <div className="ticket-timeline-v2">
-                <span>QCA SESSION PROGRESS</span>
+                <span>QODER CLOUD AGENT PROGRESS</span>
                 {card.events.slice(-8).map((event) => <div key={event.id}><time>{formatTicketClock(event.createdAt)}</time><i /><p><b>{event.kind.toUpperCase()}</b>{event.message}</p></div>)}
                 {card.events.length === 0 && <p className="ticket-empty-v2">Awaiting the first agent event.</p>}
               </div>
@@ -350,6 +350,15 @@ function formatTicketDate(value?: string) {
 
 function formatTicketClock(value: string) {
   return new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Hong_Kong" }).format(new Date(value));
+}
+
+function publicStatusLabel(status: RequestStatus) {
+  if (status === "queued") return "YOU ASK";
+  if (status === "coding") return "QODER BUILDS";
+  if (status === "testing") return "QODER VERIFIES";
+  if (status === "deploying") return "QODER DEPLOYS";
+  if (status === "live") return "LIVE";
+  return status.toUpperCase();
 }
 
 function fallbackCard(id: string, title: string, author: string, status: RequestStatus): ChangeRequest {
