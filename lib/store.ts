@@ -200,7 +200,7 @@ export async function getMarketSnapshot(): Promise<MarketSnapshot> {
         return (rows[0]?.payload as MarketSnapshot | undefined) ?? defaultMarketSnapshot;
       })()
     : memory.market;
-  if (snapshot.source === "longbridge" && Date.now() - new Date(snapshot.receivedAt).getTime() > 15_000) {
+  if (snapshot.source === "longbridge" && Date.now() - new Date(snapshot.receivedAt).getTime() > 45_000) {
     return { ...snapshot, status: "stale" };
   }
   return snapshot;
