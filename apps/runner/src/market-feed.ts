@@ -104,6 +104,7 @@ async function runSession(
   const intradayQueue: string[] = [];
   const requestedThisSession = new Set<string>();
   const retryAfter = new Map<string, number>();
+  const dirtyIntraday = new Set<string>();
   let intradayPump: NodeJS.Timeout | undefined;
   let quoteSnapshotInFlight = false;
   let nextRpcId = 100;
@@ -116,13 +117,17 @@ async function runSession(
       lastPublishedAt = Date.now();
       cache.sequence += 1;
       const snapshot = buildSnapshot([...cache.quotes.values()], cache.sequence);
-      const activeSnapshots = buildActiveIntradaySnapshots(cache.quotes, activeIntraday, cache.sequence);
+      const activeSnapshots = buildActiveIntradaySnapshots(cache.quotes, activeIntraday, cache.sequence, new Date(), dirtyIntraday);
+      for (const intraday of activeSnapshots) dirtyIntraday.delete(intraday.vendorSymbol);
       publishing = publishing
         .then(async () => {
           await publish(snapshot);
           if (activeSnapshots.length) await publishIntraday(activeSnapshots);
         })
-        .catch((error) => onStatus(`Market snapshot delivery failed · ${safeMessage(error)}`));
+        .catch((error) => {
+          for (const intraday of activeSnapshots) dirtyIntraday.add(intraday.vendorSymbol);
+          onStatus(`Market snapshot delivery failed · ${safeMessage(error)}`);
+        });
     };
     const elapsed = Date.now() - lastPublishedAt;
     const delay = immediate && lastPublishedAt === 0 ? 0 : Math.max(250, cadenceMs - elapsed);
@@ -280,7 +285,8 @@ async function runSession(
         const previous = cache.quotes.get(vendorSymbol);
         const dayRollover = intradayNeedsBackfill(previous, message.params.timestamp);
         if (mergeQuote(cache.quotes, message.params)) {
-          mergeLiveIntraday(cache.quotes, message.params, previous);
+          const changedIntraday = mergeLiveIntraday(cache.quotes, message.params, previous);
+          if (changedIntraday && (activeIntraday.get(vendorSymbol) ?? 0) >= Date.now()) dirtyIntraday.add(vendorSymbol);
           if (dayRollover) {
             requestQuoteSnapshot();
             requestedThisSession.delete(vendorSymbol);
@@ -467,10 +473,11 @@ export function buildActiveIntradaySnapshots(
   active: Map<string, number>,
   sequence: number,
   current = new Date(),
+  only?: ReadonlySet<string>,
 ) {
   const now = current.getTime();
   return [...active]
-    .filter(([, expiresAt]) => expiresAt >= now)
+    .filter(([vendorSymbol, expiresAt]) => expiresAt >= now && (!only || only.has(vendorSymbol)))
     .map(([vendorSymbol]) => buildIntradaySnapshot(quotes.get(vendorSymbol), sequence, current))
     .filter((snapshot): snapshot is MarketIntradaySnapshot => Boolean(snapshot));
 }
