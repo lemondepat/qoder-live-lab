@@ -5,7 +5,7 @@ import { useMarketFeed } from "./market-feed";
 import type { MarketIndex, MarketQuote } from "./market-data";
 import { computeMarketPulse } from "./market-pulse";
 import { derivePreviousClose, parseIndexValue } from "./kline";
-import { appendPoint, formatMinute, hongKongMinute, intradayExtremes, intradaySpan, linePath, areaPath, percentFrom, priceLevels, runningAverage, SESSION, sessionProgress, timeLevels, tradedMinutes, TRADED_MINUTES, type IntradayPoint, type IntradaySpan } from "./intraday";
+import { appendPoint, clampToSession, formatMinute, hongKongMinute, hongKongTradingDay, intradayExtremes, intradaySpan, linePath, areaPath, observationScope, percentFrom, priceLevels, runningAverage, SESSION, sessionProgress, timeLevels, tradedMinutes, TRADED_MINUTES, type IntradayPoint, type IntradaySpan } from "./intraday";
 import "./showcase.css";
 
 const POINT_LIMIT = 390;
@@ -44,7 +44,7 @@ export function Showcase() {
       <section className="index-row">
         {market.indices.map((index) => <article key={`${index.symbol}-${market.sequence}`}><div><span>{index.symbol}</span><small>{index.label}</small></div><strong>{index.value}</strong><b className={index.change >= 0 ? "up" : "down"}>{index.change >= 0 ? "+" : ""}{index.change.toFixed(2)}%</b></article>)}
       </section>
-      <IntradayPanel indices={market.indices} sequence={market.sequence} sessionLabel={sessionLabel} session={market.session} marketTimestamp={market.marketTimestamp} status={market.status} />
+      <IntradayPanel indices={market.indices} sequence={market.sequence} sessionLabel={sessionLabel} session={market.session} marketTimestamp={market.marketTimestamp} status={market.status} source={market.source} />
       <MarketPulseStrip quotes={quotes} />
       {edition === "baseline" ? <BaselineTable quotes={quotes} /> : <EnhancedMarket quotes={quotes} edition={edition} />}
       <footer className="market-footer"><span>DISPLAY ONLY · NOT INVESTMENT ADVICE</span><span>{market.source === "longbridge" ? "VERIFIED MARKET DATA" : advanced ? `FEATURE EDITION / ${edition.toUpperCase()}` : "BASELINE RELEASE / INTENTIONALLY SIMPLE"}</span></footer>
@@ -54,24 +54,27 @@ export function Showcase() {
 
 const tickTrack = new Map<string, { key: string; points: IntradayPoint[] }>();
 
-function IntradayPanel({ indices, sequence, sessionLabel, session, marketTimestamp, status }: { indices: MarketIndex[]; sequence: number; sessionLabel: string; session: string; marketTimestamp: string; status: string }) {
+function IntradayPanel({ indices, sequence, sessionLabel, session, marketTimestamp, status, source }: { indices: MarketIndex[]; sequence: number; sessionLabel: string; session: string; marketTimestamp: string; status: string; source: string }) {
   const [focus, setFocus] = useState("HSI");
   const active = indices.find((index) => index.symbol === focus) ?? indices[0] ?? null;
   const activeSymbol = active?.symbol ?? focus;
   const observed = parseIndexValue(active?.value ?? "");
   const stamped = new Date(marketTimestamp);
-  const minute = hongKongMinute(Number.isNaN(stamped.getTime()) ? new Date() : stamped);
+  const instant = Number.isNaN(stamped.getTime()) ? new Date() : stamped;
+  const tradingDay = hongKongTradingDay(instant);
+  const minute = clampToSession(hongKongMinute(instant));
+  const scope = observationScope(source, tradingDay, activeSymbol);
 
   useEffect(() => {
     if (observed === null) return;
-    const key = `${sequence}:${observed}`;
-    const entry = tickTrack.get(activeSymbol);
+    const key = `${scope}:${sequence}:${observed}`;
+    const entry = tickTrack.get(scope);
     if (entry?.key === key) return;
-    tickTrack.set(activeSymbol, { key, points: appendPoint(entry?.points ?? [], { minute, value: observed }, POINT_LIMIT) });
-  }, [activeSymbol, observed, sequence, minute]);
+    tickTrack.set(scope, { key, points: appendPoint(entry?.points ?? [], { minute, value: observed }, POINT_LIMIT) });
+  }, [scope, observed, sequence, minute]);
 
-  const tracked = tickTrack.get(activeSymbol);
-  const points = observed === null || tracked?.key === `${sequence}:${observed}`
+  const tracked = tickTrack.get(scope);
+  const points = observed === null || tracked?.key === `${scope}:${sequence}:${observed}`
     ? tracked?.points ?? []
     : appendPoint(tracked?.points ?? [], { minute, value: observed }, POINT_LIMIT);
   const previousClose = derivePreviousClose(observed, active?.change ?? 0);

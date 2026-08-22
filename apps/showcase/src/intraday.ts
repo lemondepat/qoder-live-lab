@@ -14,6 +14,26 @@ export function hongKongMinute(at: Date): number {
   return (hour % 24) * 60 + minute;
 }
 
+/** Clamp a wall-clock minute into the Hong Kong cash session [open, close]. */
+export function clampToSession(minute: number): number {
+  if (!Number.isFinite(minute)) return SESSION.open;
+  return Math.min(SESSION.close, Math.max(SESSION.open, minute));
+}
+
+/** Trading day (YYYY-MM-DD) in Hong Kong for the given instant. */
+export function hongKongTradingDay(at: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Asia/Hong_Kong" }).format(at);
+}
+
+/**
+ * Stable observation key isolating an intraday track by data source, trading
+ * day and index. A change to any part starts a fresh track so demo fallback
+ * ticks never mix with trusted live data or spill across sessions.
+ */
+export function observationScope(source: string, tradingDay: string, symbol: string): string {
+  return `${source}|${tradingDay}|${symbol}`;
+}
+
 /** Trading minutes elapsed at a wall-clock minute, with the lunch break removed. */
 export function tradedMinutes(minute: number): number {
   if (minute <= SESSION.open) return 0;

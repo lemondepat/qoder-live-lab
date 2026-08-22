@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appendPoint, areaPath, formatMinute, hongKongMinute, intradayExtremes, intradaySpan, linePath, percentFrom, priceLevels, runningAverage, SESSION, sessionProgress, timeLevels, tradedMinutes, TRADED_MINUTES } from "../src/intraday";
+import { appendPoint, areaPath, clampToSession, formatMinute, hongKongMinute, hongKongTradingDay, intradayExtremes, intradaySpan, linePath, observationScope, percentFrom, priceLevels, runningAverage, SESSION, sessionProgress, timeLevels, tradedMinutes, TRADED_MINUTES } from "../src/intraday";
 
 test("compresses the lunch break out of the traded timeline", () => {
   assert.equal(TRADED_MINUTES, 330);
@@ -24,6 +24,25 @@ test("reads Hong Kong wall-clock minutes from an instant", () => {
   assert.equal(hongKongMinute(new Date("2026-08-21T01:30:00Z")), 9 * 60 + 30);
   assert.equal(formatMinute(9 * 60 + 30), "09:30");
   assert.equal(formatMinute(SESSION.close), "16:00");
+});
+
+test("clamps wall-clock minutes into the Hong Kong cash session", () => {
+  assert.equal(clampToSession(8 * 60), SESSION.open);
+  assert.equal(clampToSession(SESSION.open), SESSION.open);
+  assert.equal(clampToSession(14 * 60), 14 * 60);
+  assert.equal(clampToSession(SESSION.close), SESSION.close);
+  assert.equal(clampToSession(23 * 60), SESSION.close);
+  assert.equal(clampToSession(Number.NaN), SESSION.open);
+});
+
+test("reads the Hong Kong trading day and isolates observation scopes", () => {
+  assert.equal(hongKongTradingDay(new Date("2026-08-21T01:30:00Z")), "2026-08-21");
+  assert.equal(hongKongTradingDay(new Date("2026-08-21T17:00:00Z")), "2026-08-22");
+  const live = observationScope("longbridge", "2026-08-21", "HSI");
+  assert.equal(live, "longbridge|2026-08-21|HSI");
+  assert.notEqual(live, observationScope("demo", "2026-08-21", "HSI"));
+  assert.notEqual(live, observationScope("longbridge", "2026-08-22", "HSI"));
+  assert.notEqual(live, observationScope("longbridge", "2026-08-21", "HSTECH"));
 });
 
 test("keeps one intraday point per minute and bounds the tail", () => {
