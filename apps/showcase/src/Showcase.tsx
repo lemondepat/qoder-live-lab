@@ -5,6 +5,7 @@ import { useMarketFeed } from "./market-feed";
 import type { MarketIndex, MarketQuote } from "./market-data";
 import { computeMarketPulse } from "./market-pulse";
 import { VolatilityWeatherMap } from "./volatility-storm-map";
+import { SectorHeatmapBoard } from "./sector-heatmap-board";
 import { anchorSeries, appendPoint, clampToSession, formatMinute, hongKongMinute, hongKongTradingDay, intradayExtremes, intradaySpan, linePath, areaPath, observationScope, percentFrom, priceLevels, runningAverage, SESSION, sessionProgress, timeLevels, tradedMinutes, TRADED_MINUTES, trustedIntradaySeries, type IntradayPoint, type IntradaySpan } from "./intraday";
 import "./showcase.css";
 
@@ -12,6 +13,7 @@ const POINT_LIMIT = 390;
 
 export function Showcase() {
   const [clock, setClock] = useState("13:42:08");
+  const [sizing, setSizing] = useState<"turnover" | "equal">("turnover");
   const market = useMarketFeed();
 
   useEffect(() => {
@@ -39,7 +41,8 @@ export function Showcase() {
       </section>
       <IntradayPanel indices={market.indices} sequence={market.sequence} sessionLabel={sessionLabel} session={market.session} marketTimestamp={market.marketTimestamp} status={market.status} source={market.source} />
       <MarketPulseStrip quotes={quotes} />
-      <BaselineTable quotes={quotes} />
+      <div className="watchlist-row"><span>WATCHLIST / {quotes.length}</span><ul className="tone-legend" aria-label="Change color legend"><li className="gain"><i />GAIN</li><li className="loss"><i />LOSS</li><li className="flat"><i />FLAT</li></ul></div>
+      <SectorHeatmapBoard quotes={quotes} sessionLabel={sessionLabel} clock={clock} status={market.status} mode={sizing} onMode={setSizing} />
       <footer className="market-footer"><span>DISPLAY ONLY · NOT INVESTMENT ADVICE</span><span>{market.status === "live" ? "VERIFIED MARKET DATA" : "BASELINE RELEASE / INTENTIONALLY SIMPLE"}</span></footer>
     </main>
   );
@@ -193,8 +196,4 @@ function MarketPulseStrip({ quotes }: { quotes: MarketQuote[] }) {
     </div>
     <div className="pulse-meter" role="img" aria-label={`${pulse.advancers} of ${pulse.total} watchlist stocks advancing`}><i style={{ width: `${pulse.advancerShare}%` }} /></div>
   </section>;
-}
-
-function BaselineTable({ quotes }: { quotes: MarketQuote[] }) {
-  return <section className="baseline-panel"><div className="baseline-title"><div><div className="watchlist-row"><span>WATCHLIST / {quotes.length}</span><ul className="tone-legend" aria-label="Change color legend"><li className="gain"><i />GAIN</li><li className="loss"><i />LOSS</li><li className="flat"><i />FLAT</li></ul></div><h1>Hong Kong<br />market monitor</h1></div><p>This baseline is intentionally simple.<br />Ask Qoder to make it useful.</p></div><div className="plain-table"><div className="table-head"><span>NAME</span><span>LAST</span><span>CHANGE</span><span>VOLUME</span></div>{quotes.map((quote) => <div className="table-row quote-tick" key={`${quote.symbol}-${quote.timestamp || "demo"}`}><span><b>{quote.symbol}</b>{quote.name}</span><strong>{quote.price.toFixed(2)}</strong><b className={quote.change >= 0 ? "up" : "down"}>{quote.change >= 0 ? "+" : ""}{quote.change.toFixed(2)}%</b><span>{quote.volume}</span></div>)}</div></section>;
 }
