@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appendPoint, areaPath, clampToSession, formatMinute, hongKongMinute, hongKongTradingDay, intradayExtremes, intradaySpan, linePath, observationScope, percentFrom, priceLevels, runningAverage, SESSION, sessionProgress, timeLevels, tradedMinutes, TRADED_MINUTES } from "../src/intraday";
+import { anchorSeries, appendPoint, areaPath, clampToSession, formatMinute, hongKongMinute, hongKongTradingDay, intradayExtremes, intradaySpan, linePath, observationScope, percentFrom, priceLevels, runningAverage, SESSION, sessionProgress, timeLevels, tradedMinutes, TRADED_MINUTES } from "../src/intraday";
 
 test("compresses the lunch break out of the traded timeline", () => {
   assert.equal(TRADED_MINUTES, 330);
@@ -92,8 +92,7 @@ test("spreads price levels and marks the session gridline minutes", () => {
   assert.ok(times.includes(SESSION.lunchStart) && times.includes(SESSION.lunchEnd));
 });
 
-test("builds line and closed area paths, including a single-point session", () => {
-  const points = [{ minute: 0, value: 0 }, { minute: 10, value: 10 }];
+test("builds line and closed area paths, including a single-point session", () => {  const points = [{ minute: 0, value: 0 }, { minute: 10, value: 10 }];
   const x = (minute: number) => minute;
   const y = (value: number) => value;
   assert.equal(linePath(points, x, y), "M0.00,0.00L10.00,10.00");
@@ -101,4 +100,16 @@ test("builds line and closed area paths, including a single-point session", () =
   assert.equal(linePath([], x, y), "");
   assert.equal(areaPath(points, x, y, 50), "M0.00,0.00L10.00,10.00L10.00,50.00L0.00,50.00Z");
   assert.equal(areaPath([], x, y, 50), "");
+});
+
+test("anchors the drawn line at the previous close so a single tick still renders a visible line", () => {
+  const first = anchorSeries(100, [{ minute: 600, value: 106 }]);
+  assert.deepEqual(first, [{ minute: SESSION.open, value: 100 }, { minute: 600, value: 106 }]);
+  const x = (minute: number) => minute;
+  const y = (value: number) => value;
+  assert.equal(linePath(first, x, y), `M${SESSION.open}.00,100.00L600.00,106.00`);
+  assert.notEqual(linePath(anchorSeries(100, [{ minute: 600, value: 106 }]), x, y), linePath([{ minute: 600, value: 106 }], x, y));
+  assert.deepEqual(anchorSeries(100, [{ minute: SESSION.open, value: 101 }]), [{ minute: SESSION.open, value: 101 }]);
+  assert.deepEqual(anchorSeries(null, [{ minute: 600, value: 106 }]), [{ minute: 600, value: 106 }]);
+  assert.deepEqual(anchorSeries(100, []), [{ minute: SESSION.open, value: 100 }]);
 });

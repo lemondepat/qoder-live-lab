@@ -65,6 +65,17 @@ export function appendPoint(points: IntradayPoint[], point: IntradayPoint, limit
   return next.length > size ? next.slice(next.length - size) : next;
 }
 
+/**
+ * Anchors the drawn line at the previous close at session open so a real,
+ * visible line is rendered from the first observed tick instead of a degenerate
+ * single-point stub. Observed ticks stay untouched for readouts and extremes.
+ */
+export function anchorSeries(previousClose: number | null, points: IntradayPoint[]): IntradayPoint[] {
+  if (previousClose === null || !Number.isFinite(previousClose)) return [...points];
+  if (points.length > 0 && points[0].minute <= SESSION.open) return [...points];
+  return [{ minute: SESSION.open, value: previousClose }, ...points];
+}
+
 /** Vertical drawing domain, padded so the line and reference levels stay inside. */
 export function intradaySpan(points: IntradayPoint[], extras: (number | null)[] = [], ratio = 0.12): IntradaySpan {
   const levels = [...points.map((point) => point.value), ...extras.filter((value): value is number => value !== null && Number.isFinite(value))];
