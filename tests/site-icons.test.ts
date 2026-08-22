@@ -29,3 +29,13 @@ test("control and showcase publish the Qoder favicon and Apple touch icon", asyn
   assert.deepEqual(icons[0], icons[2]);
   assert.deepEqual(icons[1], icons[3]);
 });
+
+test("the public header publishes the supplied Qoder line brand", async () => {
+  const [page, logo] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../public/qoder-line.png", import.meta.url)),
+  ]);
+  assert.match(page, /qoder-line\.png/);
+  assert.match(page, />Live Lab</);
+  assert.deepEqual(logo.subarray(0, pngSignature.length), pngSignature);
+});

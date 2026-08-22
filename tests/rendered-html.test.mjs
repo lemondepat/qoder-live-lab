@@ -41,11 +41,12 @@ test("server-renders the Qoder Live Lab public board", async () => {
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /<title>Qoder Live Lab<\/title>/i);
-  assert.match(html, /Shape the market/);
+  assert.match(html, /Ask for a change/);
+  assert.match(html, /What should the market become next/);
   assert.match(html, /Ask about this lab/i);
-  assert.match(html, /Every change leaves evidence/);
-  assert.match(html, /Needs attention/);
-  assert.match(html, /Autonomous/);
+  assert.match(html, /Live Pipeline/i);
+  assert.match(html, /Change log/i);
+  assert.match(html, /Boundary evidence/i);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });
 
