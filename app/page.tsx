@@ -189,7 +189,7 @@ export default function Home() {
           <h2>What should the market become next?</h2>
           <p>Describe a bold visual or interaction. Qoder may transform the whole canvas—but never the trusted data or control plane.</p>
           <label className="turn-name-v2">YOUR NICKNAME
-            <input value={author} onChange={(event) => setAuthor(event.target.value)} maxLength={24} />
+            <input value={author} onChange={(event) => setAuthor(event.target.value)} maxLength={24} autoComplete="nickname" />
           </label>
           <label className="turn-request-v2">YOUR IDEA
             <textarea value={request} onChange={(event) => setRequest(event.target.value)} placeholder="Turn it into a full-screen market heatmap with sector momentum…" maxLength={200} aria-label="Describe your feature request" />
@@ -240,9 +240,10 @@ export default function Home() {
             <span>{board.system.provider.toUpperCase()} PROVIDER</span>
             <span>AUTO-REFRESH · 2S</span>
           </div>
+          <span className="mobile-board-hint-v2">SWIPE COLUMNS <b>↔</b></span>
         </header>
 
-        <div className="pipeline-board-v2">
+        <div className="pipeline-board-v2" aria-label="Live pipeline columns; swipe horizontally on mobile">
           {pipelineLanes.map((lane) => (
             <PipelineLane key={lane.key} lane={lane} cards={grouped[lane.key] ?? []} />
           ))}
@@ -259,7 +260,7 @@ function PipelineLane({ lane, cards }: { lane: (typeof pipelineLanes)[number]; c
   return (
     <section className={`pipeline-lane-v2 lane-${lane.key}`}>
       <header><div><i />{lane.label}</div><small>{lane.eyebrow}</small></header>
-      <div className="pipeline-cards-v2">
+      <div className="pipeline-cards-v2" role="region" aria-label={`${lane.label} requests`}>
         {cards.map((card) => <RequestCard key={card.id} card={card} />)}
         {cards.length === 0 && <div className="pipeline-empty-v2">{lane.key === "queued" ? "Your idea could be next." : "No changes here right now."}</div>}
       </div>
@@ -291,7 +292,7 @@ function ChangeLogColumn({ items, attention, latestBoundary, liveVersion }: { it
   return (
     <aside className="pipeline-log-v2" aria-label="Change log">
       <header><div><i />CHANGE LOG</div><small>LIVE EVIDENCE</small></header>
-      <div className="pipeline-log-scroll-v2">
+      <div className="pipeline-log-scroll-v2" role="region" aria-label="Scrollable change events">
         {latestBoundary && <BoundaryEvidence card={latestBoundary} liveVersion={liveVersion} />}
         {attention.map((card) => (
           <article className="attention-log-v2" key={card.id}>

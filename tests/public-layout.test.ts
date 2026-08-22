@@ -22,3 +22,25 @@ test("the public experience is a fixed-screen nav switcher", async () => {
   assert.match(styles, /\.pipeline-cards-v2 \{[\s\S]*?overflow-y:auto;/);
   assert.match(styles, /\.pipeline-log-scroll-v2 \{[\s\S]*?overflow-y:auto;/);
 });
+
+test("the public experience protects phone scan, keyboard, and touch workflows", async () => {
+  const [page, styles] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /autoComplete="nickname"/);
+  assert.match(page, /SWIPE COLUMNS/);
+  assert.match(page, /swipe horizontally on mobile/);
+  assert.match(page, /aria-label=\{`\$\{lane\.label\} requests`\}/);
+
+  assert.match(styles, /@media\(max-width:600px\) and \(orientation:portrait\)/);
+  assert.match(styles, /env\(safe-area-inset-top\)/);
+  assert.match(styles, /env\(safe-area-inset-bottom\)/);
+  assert.match(styles, /\.turn-name-v2 input \{[\s\S]*?font-size:16px;/);
+  assert.match(styles, /:has\(\.turn-name-v2 input:focus,\.turn-request-v2 textarea:focus\)/);
+  assert.match(styles, /scroll-snap-type:x mandatory/);
+  assert.match(styles, /scroll-snap-stop:always/);
+  assert.match(styles, /-webkit-overflow-scrolling:touch/);
+  assert.match(styles, /@media\(max-width:900px\) and \(max-height:520px\) and \(orientation:landscape\)/);
+});
