@@ -21,6 +21,8 @@ test("the public experience is a fixed-screen nav switcher", async () => {
   assert.match(page, /QODER CLOUD AGENT PROGRESS/);
   assert.match(page, /label: "Failed Changes"/);
   assert.doesNotMatch(page, /02 \/ LIVE PIPELINE/);
+  assert.match(page, /aria-label="Live Pipeline"/);
+  assert.doesNotMatch(page, /pipeline-heading-v2/);
   assert.match(page, /aria-haspopup="dialog"/);
   assert.match(page, /role="dialog" aria-modal="true"/);
   assert.match(page, /VERSION EVIDENCE/);
@@ -32,7 +34,8 @@ test("the public experience is a fixed-screen nav switcher", async () => {
   assert.doesNotMatch(styles, /page-proof-v2/);
   assert.match(styles, /\.public-v2 \[hidden\] \{ display:none!important; \}/);
   assert.match(styles, /\.build-page-v2 \{[\s\S]*?height:calc\(100dvh - 72px\);[\s\S]*?overflow:hidden;/);
-  assert.match(styles, /\.pipeline-page-v2 \{ height:calc\(100dvh - 72px\);[\s\S]*?overflow:hidden;/);
+  assert.match(styles, /\.pipeline-page-v2 \{ height:calc\(100dvh - 72px\);[\s\S]*?grid-template-rows:minmax\(0,1fr\);[\s\S]*?padding:0;[\s\S]*?overflow:hidden;/);
+  assert.doesNotMatch(styles, /pipeline-heading-v2|pipeline-signal-v2|pipeline-meta-v2|mobile-board-hint-v2/);
   assert.match(styles, /\.pipeline-cards-v2 \{[\s\S]*?overflow-y:auto;/);
   assert.match(styles, /\.pipeline-board-v2 \{[\s\S]*?grid-template-columns:repeat\(6,/);
   assert.match(styles, /\.pipeline-lane-v2\.lane-deploying>header i/);
@@ -47,7 +50,6 @@ test("the public experience protects phone scan, keyboard, and touch workflows",
   ]);
 
   assert.match(page, /autoComplete="nickname"/);
-  assert.match(page, /SWIPE COLUMNS/);
   assert.match(page, /swipe horizontally on mobile/);
   assert.match(page, /aria-label=\{`\$\{lane\.label\} requests`\}/);
 

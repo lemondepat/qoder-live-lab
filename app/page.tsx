@@ -109,7 +109,6 @@ export default function Home() {
     () => Object.fromEntries(pipelineLanes.map((lane) => [lane.key, board.requests.filter((card) => lane.statuses.includes(card.status))])),
     [board],
   );
-  const activeRequest = board.requests.find((item) => item.id === board.system.activeRequestId);
   const selectedTicket = board.requests.find((item) => item.id === selectedTicketId);
 
   function selectPage(page: PublicPage) {
@@ -221,24 +220,7 @@ export default function Home() {
 
       </section>
 
-      <section className="pipeline-page-v2" id="pipeline" aria-labelledby="pipeline-heading" hidden={activePage !== "pipeline"}>
-        <header className="pipeline-heading-v2">
-          <div>
-            <h2 id="pipeline-heading">Every change.<br /><em>Visible.</em></h2>
-          </div>
-          <div className="pipeline-signal-v2">
-            <span>QODER SIGNAL</span>
-            <b>{activeRequest ? `${activeRequest.id} · ${publicStatusLabel(activeRequest.status)}` : "READY FOR THE NEXT IDEA"}</b>
-            <small>{activeRequest?.events.at(-1)?.message ?? "Guardrails online · queue listening"}</small>
-          </div>
-          <div className="pipeline-meta-v2">
-            <span>STABLE <b>{board.system.activeRelease.version}</b></span>
-            <span>{board.system.provider === "qca" ? "QODER CLOUD AGENT" : "LOCAL QODER FALLBACK"}</span>
-            <span>AUTO-REFRESH · 2S</span>
-          </div>
-          <span className="mobile-board-hint-v2">SWIPE COLUMNS <b>↔</b></span>
-        </header>
-
+      <section className="pipeline-page-v2" id="pipeline" aria-label="Live Pipeline" hidden={activePage !== "pipeline"}>
         <div className="pipeline-board-v2" aria-label="Live pipeline columns; swipe horizontally on mobile">
           {pipelineLanes.map((lane) => (
             <PipelineLane key={lane.key} lane={lane} cards={grouped[lane.key] ?? []} onSelect={setSelectedTicketId} />
