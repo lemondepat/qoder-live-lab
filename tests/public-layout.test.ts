@@ -106,3 +106,13 @@ test("public read paths refresh every twenty seconds behind a shared cache", asy
     assert.match(route, /stale-if-error=60/);
   }
 });
+
+test("CI applies the candidate diff boundary only to isolated QCA task branches", async () => {
+  const workflow = await readFile(new URL("../.github/workflows/candidate.yml", import.meta.url), "utf8");
+
+  assert.match(workflow, /name: Enforce candidate boundary\n\s+if: startsWith\(github\.head_ref, 'qll\/task-'\)/);
+  assert.match(workflow, /- run: npm test/);
+  assert.match(workflow, /- run: npm run lint/);
+  assert.match(workflow, /- run: npm run build --workspace @qoder-live-lab\/showcase/);
+  assert.match(workflow, /- run: npm run build\n/);
+});
