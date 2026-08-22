@@ -1,15 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMarketFeed } from "./market-feed";
 import type { MarketIndex, MarketQuote } from "./market-data";
 import { computeMarketPulse } from "./market-pulse";
-import { appendSample, axisLevels, buildCandles, candleBounds, composeSeries, derivePreviousClose, movingAverage, paddedBounds, parseIndexValue, type Candle, type CandleBounds } from "./kline";
+import { derivePreviousClose, parseIndexValue } from "./kline";
+import {
+  appendIntradaySample,
+  intradayBounds,
+  intradayLadder,
+  minuteOfDayHKT,
+  sessionProgress,
+  SESSION_TIMES,
+  type IntradayBounds,
+  type IntradaySample,
+} from "./intraday";
 import "./showcase.css";
 
-const SAMPLE_LIMIT = 180;
-const SAMPLES_PER_CANDLE = 3;
-const MA_SPAN = 5;
+const SAMPLE_LIMIT = 480;
 
 type Edition = "baseline" | "sector-heatmap" | "momentum-lens" | "market-command";
 
@@ -45,7 +53,7 @@ export function Showcase() {
       <section className="index-row">
         {market.indices.map((index) => <article key={`${index.symbol}-${market.sequence}`}><div><span>{index.symbol}</span><small>{index.label}</small></div><strong>{index.value}</strong><b className={index.change >= 0 ? "up" : "down"}>{index.change >= 0 ? "+" : ""}{index.change.toFixed(2)}%</b></article>)}
       </section>
-      <IndexKLine indices={market.indices} sequence={market.sequence} sessionLabel={sessionLabel} session={market.session} />
+      <IntradayLive indices={market.indices} sequence={market.sequence} sessionLabel={sessionLabel} session={market.session} receivedAt={market.receivedAt} />
       <MarketPulseStrip quotes={quotes} />
       {edition === "baseline" ? <BaselineTable quotes={quotes} /> : <EnhancedMarket quotes={quotes} edition={edition} />}
       <footer className="market-footer"><span>DISPLAY ONLY · NOT INVESTMENT ADVICE</span><span>{market.source === "longbridge" ? "VERIFIED MARKET DATA" : advanced ? `FEATURE EDITION / ${edition.toUpperCase()}` : "BASELINE RELEASE / INTENTIONALLY SIMPLE"}</span></footer>
@@ -53,104 +61,157 @@ export function Showcase() {
   );
 }
 
-const tickLog = new Map<string, { key: string; values: number[] }>();
+const intradayLog = new Map<string, { key: string; samples: IntradaySample[] }>();
 
-function IndexKLine({ indices, sequence, sessionLabel, session }: { indices: MarketIndex[]; sequence: number; sessionLabel: string; session: string }) {
+function IntradayLive({ indices, sequence, sessionLabel, session, receivedAt }: { indices: MarketIndex[]; sequence: number; sessionLabel: string; session: string; receivedAt: string }) {
   const [focus, setFocus] = useState("HSI");
   const active = indices.find((index) => index.symbol === focus) ?? indices[0] ?? null;
   const activeSymbol = active?.symbol ?? focus;
   const observed = parseIndexValue(active?.value ?? "");
+  const tickTime = useTickTime(receivedAt, sequence);
 
   useEffect(() => {
     if (observed === null) return;
     const key = `${sequence}:${observed}`;
-    const entry = tickLog.get(activeSymbol);
+    const entry = intradayLog.get(activeSymbol);
     if (entry?.key === key) return;
-    tickLog.set(activeSymbol, { key, values: appendSample(entry?.values ?? [], observed, SAMPLE_LIMIT) });
-  }, [activeSymbol, observed, sequence]);
+    const nextSamples = appendIntradaySample(entry?.samples ?? [], { t: tickTime, v: observed }, SAMPLE_LIMIT);
+    intradayLog.set(activeSymbol, { key, samples: nextSamples });
+  }, [activeSymbol, observed, sequence, tickTime]);
 
-  const logged = tickLog.get(activeSymbol);
-  const samples = observed === null || logged?.key === `${sequence}:${observed}` ? logged?.values ?? [] : [...(logged?.values ?? []), observed];
+  const stored = intradayLog.get(activeSymbol)?.samples ?? [];
+  const projected = observed !== null && (stored.length === 0 || stored[stored.length - 1].v !== observed)
+    ? appendIntradaySample(stored, { t: tickTime, v: observed }, SAMPLE_LIMIT)
+    : stored;
   const previousClose = derivePreviousClose(observed, active?.change ?? 0);
-  const series = composeSeries(previousClose, samples);
-  const candles = buildCandles(series, SAMPLES_PER_CANDLE);
-  const rawBounds = candleBounds(candles);
-  const averages = movingAverage(candles, MA_SPAN);
-  const bounds = paddedBounds(rawBounds, [previousClose, observed]);
-  const latest = candles.length > 0 ? candles[candles.length - 1] : null;
-  const tone = (active?.change ?? 0) >= 0 ? "up" : "down";
+  const bounds = intradayBounds(projected.map((sample) => sample.v), [previousClose, observed]);
+  const tone: "up" | "down" | "flat" = (active?.change ?? 0) > 0 ? "up" : (active?.change ?? 0) < 0 ? "down" : "flat";
   const closed = session === "closed";
+  const dayHigh = projected.length > 0 ? Math.max(...projected.map((sample) => sample.v)) : null;
+  const dayLow = projected.length > 0 ? Math.min(...projected.map((sample) => sample.v)) : null;
+  const firstSample = projected[0];
+  const lastSample = projected[projected.length - 1];
+  const sessionMinute = minuteOfDayHKT(new Date(tickTime));
+  const clampedMinute = Math.max(SESSION_TIMES.start, Math.min(SESSION_TIMES.end, sessionMinute));
+  const elapsedMin = Math.max(0, clampedMinute - SESSION_TIMES.start);
+  const progress = Math.round(sessionProgress(sessionMinute) * 100);
 
-  return <section className="kline-panel" aria-label={`${activeSymbol} candlestick chart`}>
-    <div className="kline-head">
-      <div className="kline-title">
-        <span>K-LINE / OHLC FROM OBSERVED TICKS</span>
+  return <section className="intraday-panel" aria-label={`${activeSymbol} intraday chart`}>
+    <div className="intraday-head">
+      <div className="intraday-title">
+        <span>INTRADAY · ONE-DAY LIVE CHART</span>
         <h2>{activeSymbol} <small>{active?.label ?? ""}</small></h2>
       </div>
-      <div className="kline-switch" role="group" aria-label="Select index">
+      <div className="intraday-switch" role="group" aria-label="Select index">
         {indices.map((index) => <button key={index.symbol} type="button" className={index.symbol === activeSymbol ? "is-active" : ""} aria-pressed={index.symbol === activeSymbol} onClick={() => setFocus(index.symbol)}>{index.symbol}</button>)}
       </div>
-      <dl className="kline-readout">
+      <dl className="intraday-readout">
         <div><dt>LAST</dt><dd>{active?.value ?? "—"}</dd></div>
         <div><dt>CHANGE</dt><dd className={tone}>{active ? `${active.change >= 0 ? "+" : ""}${active.change.toFixed(2)}%` : "—"}</dd></div>
         <div><dt>PREV CLOSE</dt><dd>{previousClose !== null ? formatLevel(previousClose) : "—"}</dd></div>
-        <div><dt>RANGE</dt><dd>{candles.length > 0 ? `${formatLevel(rawBounds.low)} – ${formatLevel(rawBounds.high)}` : "—"}</dd></div>
-        <div><dt>BARS</dt><dd>{candles.length} <i>· {SAMPLES_PER_CANDLE} TICKS</i></dd></div>
+        <div><dt>DAY RANGE</dt><dd>{dayHigh !== null && dayLow !== null ? `${formatLevel(dayLow)} – ${formatLevel(dayHigh)}` : "—"}</dd></div>
+        <div><dt>TICKS</dt><dd>{projected.length} <i>· SINCE 09:30</i></dd></div>
       </dl>
     </div>
-    <CandleChart candles={candles} bounds={bounds} averages={averages} previousClose={previousClose} symbol={activeSymbol} />
-    <div className="kline-foot">
-      <span>{closed ? `${sessionLabel} · SHOWING LAST TRADING DAY` : sessionLabel} · MA{MA_SPAN} OVER CANDLE CLOSES</span>
-      {latest && <span className={latest.close >= latest.open ? "up" : "down"}>LATEST BAR O {formatLevel(latest.open)} · H {formatLevel(latest.high)} · L {formatLevel(latest.low)} · C {formatLevel(latest.close)}</span>}
-      <span>{samples.length} TICK{samples.length === 1 ? "" : "S"} OBSERVED · DERIVED VIEW, DISPLAY ONLY</span>
+    <IntradayChart samples={projected} bounds={bounds} previousClose={previousClose} sessionMinute={clampedMinute} symbol={activeSymbol} tone={tone} />
+    <div className="intraday-legend">
+      <span className="dot-line" aria-hidden="true" /> Prev close reference
+      <span className="dot-live" aria-hidden="true" /> Live tick
+      <span className="dot-lunch" aria-hidden="true" /> Lunch break 12:00 – 13:00
+    </div>
+    <div className="intraday-timeline" role="img" aria-label={`Session ${progress}% complete`}>
+      <span>09:30</span>
+      <div className="intraday-track">
+        <i className="intraday-lunch" />
+        <b style={{ width: `${progress}%` }} />
+      </div>
+      <span>16:00</span>
+    </div>
+    <div className="intraday-foot">
+      <span>{closed ? `${sessionLabel} · SHOWING LAST TRADING DAY` : sessionLabel} · HKEX CASH SESSION · {progress}% ELAPSED · {elapsedMin} MIN IN</span>
+      {lastSample && firstSample && <span className={tone}>OPEN {formatLevel(firstSample.v)} · LAST {formatLevel(lastSample.v)} · Δ {formatLevel(lastSample.v - firstSample.v)}</span>}
+      <span>{projected.length} TICK{projected.length === 1 ? "" : "S"} OBSERVED · DERIVED VIEW, DISPLAY ONLY</span>
     </div>
   </section>;
 }
 
-function CandleChart({ candles, bounds, averages, previousClose, symbol }: { candles: Candle[]; bounds: CandleBounds; averages: (number | null)[]; previousClose: number | null; symbol: string }) {
-  if (candles.length === 0) return <div className="kline-empty">Collecting live ticks for {symbol} — the first candle opens on the next feed update.</div>;
+function IntradayChart({ samples, bounds, previousClose, sessionMinute, symbol, tone }: { samples: IntradaySample[]; bounds: IntradayBounds; previousClose: number | null; sessionMinute: number; symbol: string; tone: "up" | "down" | "flat" }) {
+  if (samples.length === 0) {
+    return <div className="intraday-empty">Collecting live intraday ticks for {symbol} — the line begins on the next feed update.</div>;
+  }
 
   const width = 1000;
   const height = 320;
-  const padY = 18;
-  const padX = 14;
+  const padY = 20;
+  const padX = 16;
   const plotWidth = width - padX * 2;
-  // Spread every bar across the whole plot so the chart is always complete,
-  // whether one candle or a full session of them is available.
-  const slot = plotWidth / candles.length;
-  const bodyWidth = Math.max(3, Math.min(26, slot * 0.6));
-  const toY = (value: number) => height - padY - ((value - bounds.low) / bounds.span) * (height - padY * 2);
-  const centre = (index: number) => padX + slot * (index + 0.5);
-  const maPoints = averages
-    .map((value, index) => (value === null ? null : `${centre(index).toFixed(2)},${toY(value).toFixed(2)}`))
-    .filter((point): point is string => point !== null)
-    .join(" ");
-  const guides = axisLevels(bounds, 5);
+  const plotHeight = height - padY * 2;
+
+  const toX = (minute: number) => padX + sessionProgress(minute) * plotWidth;
+  const toY = (value: number) => padY + (1 - (value - bounds.low) / bounds.span) * plotHeight;
+
+  const points = samples.map((sample) => `${toX(minuteOfDayHKT(new Date(sample.t))).toFixed(2)},${toY(sample.v).toFixed(2)}`);
+  const linePath = `M${points.join(" L")}`;
+
+  // Anchor the fill on the previous close so gain/loss surface is intuitive.
+  const baseline = previousClose !== null ? toY(previousClose) : toY(bounds.low);
+  const firstX = toX(minuteOfDayHKT(new Date(samples[0].t)));
+  const lastX = toX(minuteOfDayHKT(new Date(samples[samples.length - 1].t)));
+  const areaPath = `${linePath} L${lastX.toFixed(2)},${baseline.toFixed(2)} L${firstX.toFixed(2)},${baseline.toFixed(2)} Z`;
+
+  const guides = intradayLadder(bounds, 5);
   const previousY = previousClose !== null ? toY(previousClose) : null;
 
-  return <div className="kline-chart">
-    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${symbol} candlestick chart built from ${candles.length} observed candles`}>
-      {guides.map((level, position) => <line key={`guide-${position}`} className="kline-guide" x1={padX} x2={width - padX} y1={toY(level)} y2={toY(level)} />)}
-      {previousY !== null && <line className="kline-prev" x1={padX} x2={width - padX} y1={previousY} y2={previousY} />}
-      {candles.map((candle) => {
-        const rising = candle.close >= candle.open;
-        const top = toY(Math.max(candle.open, candle.close));
-        const bottom = toY(Math.min(candle.open, candle.close));
-        return <g key={candle.index} className={`kline-candle ${rising ? "rising" : "falling"}`}>
-          <line x1={centre(candle.index)} x2={centre(candle.index)} y1={toY(candle.high)} y2={toY(candle.low)} />
-          <rect x={centre(candle.index) - bodyWidth / 2} y={top} width={bodyWidth} height={Math.max(1.5, bottom - top)} />
-        </g>;
-      })}
-      {maPoints && <polyline className="kline-ma" points={maPoints} />}
+  const lunchStartX = toX(SESSION_TIMES.lunchStart);
+  const lunchEndX = toX(SESSION_TIMES.lunchEnd);
+  const nowX = toX(sessionMinute);
+
+  const lastValue = samples[samples.length - 1].v;
+  const lastY = toY(lastValue);
+
+  const hourTicks = [10, 11, 12, 13, 14, 15, 16].map((hour) => hour * 60);
+
+  return <div className="intraday-chart">
+    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${symbol} one-day intraday line chart from ${samples.length} observed ticks`}>
+      <defs>
+        <linearGradient id={`intraday-fill-${symbol}-${tone}`} x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" className={`intraday-stop-${tone}`} stopOpacity="0.55" />
+          <stop offset="100%" className={`intraday-stop-${tone}`} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <rect className="intraday-lunch-band" x={lunchStartX} y={padY} width={Math.max(0, lunchEndX - lunchStartX)} height={plotHeight} />
+      {guides.map((level, position) => <line key={`guide-${position}`} className="intraday-guide" x1={padX} x2={width - padX} y1={toY(level)} y2={toY(level)} />)}
+      {hourTicks.map((minute) => <line key={`hour-${minute}`} className="intraday-hour" x1={toX(minute)} x2={toX(minute)} y1={padY} y2={height - padY} />)}
+      {previousY !== null && <line className="intraday-prev" x1={padX} x2={width - padX} y1={previousY} y2={previousY} />}
+      <path className={`intraday-area ${tone}`} d={areaPath} fill={`url(#intraday-fill-${symbol}-${tone})`} />
+      <path className={`intraday-line ${tone}`} d={linePath} />
+      <line className="intraday-cursor" x1={nowX} x2={nowX} y1={padY} y2={height - padY} />
+      <g className={`intraday-marker ${tone}`}>
+        <circle className="intraday-pulse" cx={lastX} cy={lastY} r="10" />
+        <circle className="intraday-dot" cx={lastX} cy={lastY} r="4" />
+      </g>
     </svg>
-    <ul className="kline-scale" aria-hidden="true">
+    <ul className="intraday-scale" aria-hidden="true">
       {guides.map((level, position) => <li key={`scale-${position}`}>{formatLevel(level)}</li>)}
+    </ul>
+    <ul className="intraday-hours" aria-hidden="true">
+      <li>09:30</li><li>10:30</li><li>12:00</li><li>13:00</li><li>14:30</li><li>16:00</li>
     </ul>
   </div>;
 }
 
+function useTickTime(receivedAt: string, sequence: number) {
+  const ref = useRef<{ key: string; time: number }>({ key: "", time: Date.now() });
+  const key = `${sequence}:${receivedAt}`;
+  if (ref.current.key !== key) {
+    const parsed = Date.parse(receivedAt);
+    ref.current = { key, time: Number.isFinite(parsed) && parsed > 0 ? parsed : Date.now() };
+  }
+  return ref.current.time;
+}
+
 function formatLevel(value: number) {
-  return new Intl.NumberFormat("en-HK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+  return new Intl.NumberFormat("en-HK", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "auto" }).format(value);
 }
 
 function MarketPulseStrip({ quotes }: { quotes: MarketQuote[] }) {
@@ -191,3 +252,4 @@ function MarketTile({ quote, showTrail }: { quote: MarketQuote; showTrail: boole
   const points = quote.trail.map((value, index) => `${quote.trail.length === 1 ? 50 : (index / (quote.trail.length - 1)) * 100},${85 - ((value - minimum) / range) * 70}`).join(" ");
   return <article className={`market-tile quote-tick ${quote.change >= 0 ? "positive" : "negative"}`}><div className="tile-top"><span>{quote.symbol}</span><small>{quote.sector}</small></div><h2>{quote.name}</h2><div className="tile-price"><strong>{quote.price.toFixed(2)}</strong><b>{quote.change >= 0 ? "+" : ""}{quote.change.toFixed(2)}%</b></div>{showTrail && <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-label={`${quote.name} momentum trail`}><polyline points={points} /></svg>}<div className="tile-volume">VOL {quote.volume}</div></article>;
 }
+
