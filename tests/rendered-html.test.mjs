@@ -44,6 +44,7 @@ test("server-renders the Qoder Live Lab public board", async () => {
   assert.match(html, /Shape the market/);
   assert.match(html, /Ask about this lab/i);
   assert.match(html, /Every change leaves evidence/);
+  assert.match(html, /Needs attention/);
   assert.match(html, /Autonomous/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });

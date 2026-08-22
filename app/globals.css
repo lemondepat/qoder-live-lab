@@ -36,10 +36,10 @@ h1 em { color:var(--purple); font-style:normal; }
 .form-foot button:hover { background:var(--purple); }.notice { margin:12px 0 0; font:700 12px monospace; color:#5d3fe2; }
 .board { padding:74px 4vw; background:#111116; color:white; }.board-title { display:flex; justify-content:space-between; align-items:end; margin-bottom:40px; }
 .board-title>span { color:#777782; font:600 11px monospace; text-transform:uppercase; }
-.lanes { display:grid; grid-template-columns:repeat(4,1fr); border-top:1px solid #36363d; border-left:1px solid #36363d; }
+.lanes { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); border-top:1px solid #36363d; border-left:1px solid #36363d; }
 .lane { min-height:360px; border-right:1px solid #36363d; border-bottom:1px solid #36363d; padding:18px; }
 .lane header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }.lane header div { font-weight:800; text-transform:uppercase; font-size:13px; }.lane header small { color:#74747e; font:500 10px monospace; }
-.lane-dot { width:8px; height:8px; display:inline-block; border-radius:50%; margin-right:9px; background:#777; }.lane-dot.coding { background:var(--purple); }.lane-dot.testing { background:var(--cyan); }.lane-dot.live { background:var(--lime); }
+.lane-dot { width:8px; height:8px; display:inline-block; border-radius:50%; margin-right:9px; background:#777; }.lane-dot.coding { background:var(--purple); }.lane-dot.testing { background:var(--cyan); }.lane-dot.live { background:var(--lime); }.lane-dot.attention { background:var(--orange); }
 .lane-cards { display:grid; gap:12px; }.request-card,.empty-card { border-radius:14px; padding:17px; background:#1a1a20; border-top:3px solid #777; }
 .request-card.purple { border-color:var(--purple); }.request-card.cyan { border-color:var(--cyan); }.request-card.green { border-color:var(--lime); }.request-card.orange { border-color:var(--orange); }
 .card-top,.card-meta { display:flex; justify-content:space-between; font:700 9px monospace; color:#8b8b94; letter-spacing:.06em; }.request-card h3 { font-size:16px; line-height:1.25; margin:20px 0 10px; }.request-card>p { color:#888892; font-size:12px; }.card-meta { color:white; align-items:center; margin-top:26px; }.card-meta b { font-size:18px; }.empty-card { border:1px dashed #3e3e45; color:#666671; font-size:13px; }
