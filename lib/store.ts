@@ -369,14 +369,6 @@ export async function createBoundaryChallenge(title: string) {
   return request;
 }
 
-export async function createRehearsalFeature(feature: { id: string; request: string }) {
-  const request = await createRequest({ author: "Stage operator", title: feature.request, idempotencyKey: `feature-${feature.id}-${crypto.randomUUID()}`, source: "ops" });
-  return updateRequest(request.id, {
-    presetFeatureId: feature.id,
-    events: [...request.events, makeEvent(request.id, "status", `Signed rehearsal feature selected · ${feature.id}`)],
-  });
-}
-
 export async function rollbackRelease() {
   const system = await readSystem();
   if (!system.previousRelease) return system;

@@ -21,6 +21,8 @@ Within that canvas, a candidate may make a dramatic product-level transformation
 
 Use only market facts returned by the trusted `useMarketFeed()` hook. Derived visualizations such as breadth, ranking, normalized sparklines, heatmaps, and relative comparisons are allowed. Never replace live values with literals or simulated motion.
 
-Before designing or editing a candidate, read `docs/qca/market-data-capabilities.md` in full. It is the authoritative, repository-pinned contract for the market fields already available to the canvas, including official one-minute intraday bars. Do not guess provider methods, call Longbridge directly, or search for a different API.
+Before designing or editing a candidate, read both `docs/qca/market-data-capabilities.md` and `docs/qca/feature-library.md` in full. The first is the authoritative, repository-pinned contract for the market fields already available to the canvas, including official one-minute intraday bars. The second catalogs optional dormant visual accelerators. Do not guess provider methods, call Longbridge directly, or search for a different API.
+
+The feature library is source material, not a release mechanism. Its components must remain unreachable from the opening Stage until an audience ticket semantically matches one and the Qoder candidate explicitly imports, adapts, tests, and connects it through the normal showcase entry point. Never create a query-parameter edition switch, preset activation path, or controller bypass. When the ticket does not match, build the requested experience normally without importing the library.
 
 Use only the existing dependencies. Prefer one coherent, high-impact transformation over a tiny decorative change. Run the showcase build and tests. Work on the assigned `qll/task-*` branch and stop with `DECLINED` when a request is outside the allowed market canvas boundary.
