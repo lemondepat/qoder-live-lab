@@ -49,3 +49,28 @@ test("the public header publishes the supplied Qoder line brand", async () => {
   assert.match(page, />Live Lab</);
   assert.deepEqual(logo.subarray(0, pngSignature.length), pngSignature);
 });
+
+test("every visible product brand mark uses the Qoder icon asset", async () => {
+  const sources = await Promise.all([
+    readFile(new URL("../app/stage/stage-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/ops/ops-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/repo-guide.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../apps/showcase/src/Showcase.tsx", import.meta.url), "utf8"),
+  ]);
+
+  for (const source of sources) {
+    assert.match(source, /qoder-brand-icon/);
+    assert.doesNotMatch(source, /<span>Q<\/span>/);
+  }
+
+  const [controlStyles, showcaseStyles] = await Promise.all([
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../apps/showcase/src/showcase.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(controlStyles, /\.qoder-brand-icon[^}]*qoder-favicon-v2\.png/);
+  assert.match(showcaseStyles, /\.qoder-brand-icon[^}]*qoder-favicon-v2\.png/);
+
+  for (const asset of ["file.svg", "globe.svg", "window.svg"]) {
+    await assert.rejects(access(new URL(`../public/${asset}`, import.meta.url)));
+  }
+});

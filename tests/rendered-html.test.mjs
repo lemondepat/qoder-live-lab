@@ -47,6 +47,7 @@ test("server-renders the Qoder Live Lab public board", async () => {
   assert.match(html, /Ask for a change/);
   assert.match(html, /What should the market become next/);
   assert.match(html, /Ask about this lab/i);
+  assert.match(html, /qoder-brand-icon/);
   assert.match(html, /Live Pipeline/i);
   assert.match(html, /Failed Changes/i);
   assert.doesNotMatch(html, /Change log/i);
@@ -59,9 +60,12 @@ test("server-renders stage and operator routes and folds versions into the pipel
   assert.equal(releases.status, 200);
   assert.equal(ops.status, 200);
   const stageHtml = await stage.text();
+  const opsHtml = await ops.text();
   assert.match(stageHtml, /Current verified market dashboard/i);
+  assert.match(stageHtml, /qoder-brand-icon/i);
   assert.match(stageHtml, /sandbox="allow-scripts allow-pointer-lock allow-same-origin"/i);
   assert.doesNotMatch(stageHtml, /sandbox="[^"]*(allow-forms|allow-popups|allow-top-navigation)/i);
   assert.match(await releases.text(), /Live Pipeline/i);
-  assert.match(await ops.text(), /Trusted control plane/i);
+  assert.match(opsHtml, /Trusted control plane/i);
+  assert.match(opsHtml, /qoder-brand-icon/i);
 });
