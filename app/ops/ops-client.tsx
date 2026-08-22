@@ -42,7 +42,7 @@ export function OpsClient() {
   const runnerOnline = Boolean(board?.system.runnerLastSeenAt && new Date(board.generatedAt).getTime() - new Date(board.system.runnerLastSeenAt).getTime() < 15_000);
   return (
     <main className="ops-shell">
-      <header className="ops-header"><Link href="/">← Public board</Link><div><span>Q</span><b>Qoder Live Lab / Ops</b></div><Link href="/stage">Open stage ↗</Link></header>
+      <header className="ops-header"><Link href="/">← Public board</Link><div><span className="qoder-brand-icon" aria-hidden="true" /><b>Qoder Live Lab / Ops</b></div><Link href="/stage">Open stage ↗</Link></header>
       <section className="ops-hero"><div><p>TRUSTED CONTROL PLANE</p><h1>Run fast.<br /><em>Stay bounded.</em></h1></div><div className="ops-status"><span>RUNNER</span><b className={runnerOnline ? "ok" : ""}>{runnerOnline ? "CONNECTED" : "WAITING"}</b><small>{board?.system.provider.toUpperCase() ?? "QCA"} provider · {board?.system.queuePaused ? "Queue paused" : "Auto mode"}</small></div></section>
       <section className="ops-grid">
         <article className="ops-card wide"><span className="ops-label">CURRENT JOB</span><h2>{active?.title ?? "No active task"}</h2><p>{active ? `${active.id} · ${active.status.toUpperCase()}` : "The runner will claim the next allowed request automatically."}</p>{active?.events.slice(-4).map((event) => <div className="ops-log" key={event.id}><time>{new Date(event.createdAt).toLocaleTimeString()}</time><span>{event.message}</span></div>)}</article>

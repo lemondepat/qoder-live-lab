@@ -39,7 +39,7 @@ export function StageClient() {
   return (
     <main className="stage-shell">
       <header className="stage-bar">
-        <div className="stage-brand"><span>Q</span><div><b>Qoder Live Lab</b><small>Autonomous engineering · visibly bounded</small></div></div>
+        <div className="stage-brand"><span className="qoder-brand-icon" aria-hidden="true" /><div><b>Qoder Live Lab</b><small>Autonomous engineering · visibly bounded</small></div></div>
         <div className="stage-now"><span>{activeRequest ? "BUILDING NOW" : "CURRENT RELEASE"}</span><strong>{activeRequest?.title ?? release?.requirement ?? "Hong Kong market dashboard"}</strong></div>
         <div className="stage-version"><div className="stage-qr"><QRCodeSVG value={process.env.NEXT_PUBLIC_SITE_URL || "https://qoder.com"} size={42} bgColor="transparent" fgColor="#f4f1e9" /><span>SCAN<br />TO BUILD</span></div><i />LIVE <b>{release?.version ?? OPENING_RELEASE_VERSION}</b></div>
       </header>
