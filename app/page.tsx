@@ -60,6 +60,7 @@ const pipelineLanes: { key: string; statuses: RequestStatus[]; label: string; ey
 ];
 
 type ChangeLogItem = { card: ChangeRequest; event: RequestEvent };
+type PublicPage = "build" | "pipeline";
 
 export default function Home() {
   const [board, setBoard] = useState(fallback);
@@ -67,6 +68,7 @@ export default function Home() {
   const [request, setRequest] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [activePage, setActivePage] = useState<PublicPage>("build");
 
   useEffect(() => {
     let active = true;
@@ -85,6 +87,13 @@ export default function Home() {
     };
   }, []);
 
+  useEffect(() => {
+    const syncPageToHash = () => setActivePage(window.location.hash === "#pipeline" ? "pipeline" : "build");
+    syncPageToHash();
+    window.addEventListener("hashchange", syncPageToHash);
+    return () => window.removeEventListener("hashchange", syncPageToHash);
+  }, []);
+
   const grouped = useMemo(
     () => Object.fromEntries(pipelineLanes.map((lane) => [lane.key, board.requests.filter((card) => lane.statuses.includes(card.status))])),
     [board],
@@ -99,6 +108,11 @@ export default function Home() {
   const latestBoundary = board.requests.find((item) => item.status === "blocked" || item.status === "rejected");
   const attention = board.requests.filter((item) => item.status === "failed" || item.status === "cancelled");
   const activeRequest = board.requests.find((item) => item.id === board.system.activeRequestId);
+
+  function selectPage(page: PublicPage) {
+    setActivePage(page);
+    window.history.replaceState(null, "", page === "pipeline" ? "#pipeline" : "#build");
+  }
 
   async function submitRequest(value = request) {
     const clean = value.trim();
@@ -129,7 +143,7 @@ export default function Home() {
         ? `Blocked by ${created.policy?.ruleId}. The live version was not changed.`
         : "Request accepted. Follow it in the Live Pipeline.");
       setBoard((current) => ({ ...current, requests: [created, ...current.requests.filter((item) => item.id !== created.id)] }));
-      window.setTimeout(() => document.getElementById("pipeline")?.scrollIntoView({ behavior: "smooth", block: "start" }), 450);
+      window.setTimeout(() => selectPage("pipeline"), 450);
     } catch {
       setNotice("The live queue is reconnecting. Please try once more.");
     } finally {
@@ -138,16 +152,16 @@ export default function Home() {
   }
 
   return (
-    <main className="public-v2">
+    <main className="public-v2" data-page={activePage}>
       <header className="public-header-v2">
-        <a className="public-brand-v2" href="#build" aria-label="Qoder Live Lab home">
+        <button type="button" className="public-brand-v2" onClick={() => selectPage("build")} aria-label="Open the Build page">
           <Image src="/qoder-line.png" alt="Qoder" width={150} height={39} priority />
           <i />
           <b>Live Lab</b>
-        </a>
+        </button>
         <nav className="public-pages-v2" aria-label="Public pages">
-          <a href="#build"><span>01</span> Build</a>
-          <a href="#pipeline"><span>02</span> Live Pipeline</a>
+          <button type="button" className={activePage === "build" ? "active" : ""} aria-pressed={activePage === "build"} onClick={() => selectPage("build")}><span>01</span> Build</button>
+          <button type="button" className={activePage === "pipeline" ? "active" : ""} aria-pressed={activePage === "pipeline"} onClick={() => selectPage("pipeline")}><span>02</span> Live Pipeline</button>
         </nav>
         <div className="public-utilities-v2">
           <a href="/stage">Stage</a>
@@ -156,7 +170,7 @@ export default function Home() {
         </div>
       </header>
 
-      <section className="build-page-v2" id="build" aria-labelledby="build-heading">
+      <section className="build-page-v2" id="build" aria-labelledby="build-heading" hidden={activePage !== "build"}>
         <article className="build-story-v2">
           <p className="page-index-v2">01 / BUILD IN PUBLIC</p>
           <h1 id="build-heading">Ask for a change.<br /><em>Watch it ship.</em></h1>
@@ -164,7 +178,7 @@ export default function Home() {
           <div className="journey-v2" aria-label="How a request becomes live">
             <span>YOU ASK</span><i>→</i><span>QODER BUILDS</span><i>→</i><span>POLICY VERIFIES</span><i>→</i><span>LIVE</span>
           </div>
-          <a className="pipeline-link-v2" href="#pipeline">Watch the pipeline <span>↓</span></a>
+          <button type="button" className="pipeline-link-v2" onClick={() => selectPage("pipeline")}>Watch the pipeline <span>→</span></button>
         </article>
 
         <form className="turn-card-v2" onSubmit={(event) => { event.preventDefault(); submitRequest(); }}>
@@ -210,7 +224,7 @@ export default function Home() {
         </footer>
       </section>
 
-      <section className="pipeline-page-v2" id="pipeline" aria-labelledby="pipeline-heading">
+      <section className="pipeline-page-v2" id="pipeline" aria-labelledby="pipeline-heading" hidden={activePage !== "pipeline"}>
         <header className="pipeline-heading-v2">
           <div>
             <p className="page-index-v2">02 / LIVE PIPELINE</p>
