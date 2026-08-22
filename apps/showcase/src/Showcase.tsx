@@ -2,9 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useMarketFeed } from "./market-feed";
-import type { MarketQuote } from "./market-data";
+import type { MarketIndex, MarketQuote } from "./market-data";
 import { computeMarketPulse } from "./market-pulse";
+import { appendSample, buildCandles, candleBounds, movingAverage, parseIndexValue, type Candle } from "./kline";
 import "./showcase.css";
+
+const SAMPLE_LIMIT = 180;
+const SAMPLES_PER_CANDLE = 3;
+const MA_SPAN = 5;
 
 type Edition = "baseline" | "sector-heatmap" | "momentum-lens" | "market-command";
 
@@ -40,11 +45,103 @@ export function Showcase() {
       <section className="index-row">
         {market.indices.map((index) => <article key={`${index.symbol}-${market.sequence}`}><div><span>{index.symbol}</span><small>{index.label}</small></div><strong>{index.value}</strong><b className={index.change >= 0 ? "up" : "down"}>{index.change >= 0 ? "+" : ""}{index.change.toFixed(2)}%</b></article>)}
       </section>
+      <IndexKLine indices={market.indices} sequence={market.sequence} sessionLabel={sessionLabel} />
       <MarketPulseStrip quotes={quotes} />
       {edition === "baseline" ? <BaselineTable quotes={quotes} /> : <EnhancedMarket quotes={quotes} edition={edition} />}
       <footer className="market-footer"><span>DISPLAY ONLY · NOT INVESTMENT ADVICE</span><span>{market.source === "longbridge" ? `MARKET DATA · ${market.providerLabel}` : advanced ? `FEATURE EDITION / ${edition.toUpperCase()}` : "BASELINE RELEASE / INTENTIONALLY SIMPLE"}</span></footer>
     </main>
   );
+}
+
+const tickLog = new Map<string, { key: string; values: number[] }>();
+
+function IndexKLine({ indices, sequence, sessionLabel }: { indices: MarketIndex[]; sequence: number; sessionLabel: string }) {
+  const [focus, setFocus] = useState("HSI");
+  const active = indices.find((index) => index.symbol === focus) ?? indices[0] ?? null;
+  const activeSymbol = active?.symbol ?? focus;
+  const observed = parseIndexValue(active?.value ?? "");
+
+  useEffect(() => {
+    if (observed === null) return;
+    const key = `${sequence}:${observed}`;
+    const entry = tickLog.get(activeSymbol);
+    if (entry?.key === key) return;
+    tickLog.set(activeSymbol, { key, values: appendSample(entry?.values ?? [], observed, SAMPLE_LIMIT) });
+  }, [activeSymbol, observed, sequence]);
+
+  const logged = tickLog.get(activeSymbol);
+  const samples = observed === null || logged?.key === `${sequence}:${observed}` ? logged?.values ?? [] : [...(logged?.values ?? []), observed];
+  const candles = buildCandles(samples, SAMPLES_PER_CANDLE);
+  const bounds = candleBounds(candles);
+  const averages = movingAverage(candles, MA_SPAN);
+  const previousClose = active && observed !== null && active.change !== -100 ? observed / (1 + active.change / 100) : null;
+  const latest = candles.length > 0 ? candles[candles.length - 1] : null;
+  const tone = (active?.change ?? 0) >= 0 ? "up" : "down";
+
+  return <section className="kline-panel" aria-label={`${activeSymbol} candlestick chart`}>
+    <div className="kline-head">
+      <div className="kline-title">
+        <span>K-LINE / OHLC FROM OBSERVED TICKS</span>
+        <h2>{activeSymbol} <small>{active?.label ?? ""}</small></h2>
+      </div>
+      <div className="kline-switch" role="group" aria-label="Select index">
+        {indices.map((index) => <button key={index.symbol} type="button" className={index.symbol === activeSymbol ? "is-active" : ""} aria-pressed={index.symbol === activeSymbol} onClick={() => setFocus(index.symbol)}>{index.symbol}</button>)}
+      </div>
+      <dl className="kline-readout">
+        <div><dt>LAST</dt><dd>{active?.value ?? "—"}</dd></div>
+        <div><dt>CHANGE</dt><dd className={tone}>{active ? `${active.change >= 0 ? "+" : ""}${active.change.toFixed(2)}%` : "—"}</dd></div>
+        <div><dt>RANGE</dt><dd>{candles.length > 0 ? `${formatLevel(bounds.low)} – ${formatLevel(bounds.high)}` : "—"}</dd></div>
+        <div><dt>BARS</dt><dd>{candles.length} <i>· {SAMPLES_PER_CANDLE} TICKS</i></dd></div>
+      </dl>
+    </div>
+    <CandleChart candles={candles} bounds={bounds} averages={averages} previousClose={previousClose} symbol={activeSymbol} />
+    <div className="kline-foot">
+      <span>{sessionLabel} · MA{MA_SPAN} OVER CANDLE CLOSES</span>
+      {latest && <span className={latest.close >= latest.open ? "up" : "down"}>LATEST BAR O {formatLevel(latest.open)} · H {formatLevel(latest.high)} · L {formatLevel(latest.low)} · C {formatLevel(latest.close)}</span>}
+      <span>{samples.length} TICK{samples.length === 1 ? "" : "S"} OBSERVED · DERIVED VIEW, DISPLAY ONLY</span>
+    </div>
+  </section>;
+}
+
+function CandleChart({ candles, bounds, averages, previousClose, symbol }: { candles: Candle[]; bounds: ReturnType<typeof candleBounds>; averages: (number | null)[]; previousClose: number | null; symbol: string }) {
+  if (candles.length === 0) return <div className="kline-empty">Collecting live ticks for {symbol} — the first candle opens on the next feed update.</div>;
+
+  const width = 1000;
+  const height = 300;
+  const slot = width / Math.max(candles.length, 12);
+  const bodyWidth = Math.max(2, Math.min(18, slot * 0.58));
+  const toY = (value: number) => height - ((value - bounds.low) / bounds.span) * (height - 24) - 12;
+  const centre = (index: number) => slot * (index + 0.5);
+  const maPoints = averages
+    .map((value, index) => (value === null ? null : `${centre(index).toFixed(2)},${toY(value).toFixed(2)}`))
+    .filter((point): point is string => point !== null)
+    .join(" ");
+  const guides = [bounds.high, bounds.low + bounds.span / 2, bounds.low];
+  const previousY = previousClose !== null && previousClose >= bounds.low && previousClose <= bounds.high ? toY(previousClose) : null;
+
+  return <div className="kline-chart">
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label={`${symbol} candlestick chart built from ${candles.length} observed candles`}>
+      {guides.map((level, position) => <line key={`guide-${position}`} className="kline-guide" x1={0} x2={width} y1={toY(level)} y2={toY(level)} />)}
+      {previousY !== null && <line className="kline-prev" x1={0} x2={width} y1={previousY} y2={previousY} />}
+      {candles.map((candle) => {
+        const rising = candle.close >= candle.open;
+        const top = toY(Math.max(candle.open, candle.close));
+        const bottom = toY(Math.min(candle.open, candle.close));
+        return <g key={candle.index} className={`kline-candle ${rising ? "rising" : "falling"}`}>
+          <line x1={centre(candle.index)} x2={centre(candle.index)} y1={toY(candle.high)} y2={toY(candle.low)} />
+          <rect x={centre(candle.index) - bodyWidth / 2} y={top} width={bodyWidth} height={Math.max(1.5, bottom - top)} />
+        </g>;
+      })}
+      {maPoints && <polyline className="kline-ma" points={maPoints} />}
+    </svg>
+    <ul className="kline-scale" aria-hidden="true">
+      {guides.map((level, position) => <li key={`scale-${position}`}>{formatLevel(level)}</li>)}
+    </ul>
+  </div>;
+}
+
+function formatLevel(value: number) {
+  return new Intl.NumberFormat("en-HK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
 }
 
 function MarketPulseStrip({ quotes }: { quotes: MarketQuote[] }) {
