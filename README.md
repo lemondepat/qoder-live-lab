@@ -120,7 +120,7 @@ Before doors open:
 - Put `/stage` fullscreen on computer A and `/ops` plus runner logs on computer B.
 - Start with the deliberately sparse baseline: one index, one plain watchlist, and no advanced visualizations.
 - Use the Feature Launchpad to queue a full-screen heatmap, momentum cockpit, market command wall, volatility environment, or closing-bell mode. Live mode still follows the normal Qoder and policy path; dry-run mode is visibly labelled rehearsal fallback.
-- Submit one safe visual request and confirm it reaches `LIVE` within five minutes.
+- Submit one safe visual request and confirm it reaches `LIVE` within the configured 25-minute release budget. The Qoder Cloud Agent may use up to 20 minutes, leaving five minutes for independent checks, Preview, and activation.
 - Run “Modify the admin control panel” from Ops and confirm `BLOCKED`, a rule ID, redacted evidence, `0 files promoted`, and an unchanged stage canvas.
 - Test pause, cancel, runner restart, Qoder credential failure, and rollback.
 - Keep `DRY_RUN=true` as a clearly labelled fallback if Qoder Cloud Agents or venue networking is unavailable.
