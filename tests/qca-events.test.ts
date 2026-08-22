@@ -1,7 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { consumeSse, githubSessionResource, parseFrame, publicProgress, sessionIsIdle } from "../apps/runner/src/qca-provider";
-import { loadConfig } from "../apps/runner/src/config";
+import { DEFAULT_AGENT_TIMEOUT_MS, DEFAULT_TOTAL_TIMEOUT_MS, loadConfig } from "../apps/runner/src/config";
+
+test("reserves twenty minutes for QCA and five minutes for release checks", () => {
+  const previousAgentTimeout = process.env.AGENT_TIMEOUT_MS;
+  const previousTotalTimeout = process.env.TASK_TIMEOUT_MS;
+  delete process.env.AGENT_TIMEOUT_MS;
+  delete process.env.TASK_TIMEOUT_MS;
+  try {
+    const config = loadConfig();
+    assert.equal(config.taskTimeoutMs, DEFAULT_AGENT_TIMEOUT_MS);
+    assert.equal(config.totalTimeoutMs, DEFAULT_TOTAL_TIMEOUT_MS);
+    assert.equal(config.taskTimeoutMs, 1_200_000);
+    assert.equal(config.totalTimeoutMs, 1_500_000);
+  } finally {
+    if (previousAgentTimeout === undefined) delete process.env.AGENT_TIMEOUT_MS;
+    else process.env.AGENT_TIMEOUT_MS = previousAgentTimeout;
+    if (previousTotalTimeout === undefined) delete process.env.TASK_TIMEOUT_MS;
+    else process.env.TASK_TIMEOUT_MS = previousTotalTimeout;
+  }
+});
 
 test("uses the current GitHub session resource shape", () => {
   const resource = githubSessionResource({

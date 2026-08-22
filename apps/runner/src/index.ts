@@ -87,7 +87,7 @@ async function simulateAgent(requestId: string) {
   }
 }
 
-function guardDeadline(deadline: number) { if (Date.now() >= deadline) throw new Error("Task exceeded the five-minute release budget"); }
+function guardDeadline(deadline: number) { if (Date.now() >= deadline) throw new Error("Task exceeded the total release budget"); }
 function failurePolicy(error: unknown): PolicyDecision {
   const message = error instanceof Error ? error.message : String(error);
   if (/Vercel|Preview|health check/i.test(message)) return { outcome: "reject", layer: "deployment", ruleId: "DEPLOYMENT-FAILED", publicReason: "The candidate Preview could not be verified, so the live version was not changed.", evidence: [safeEvidence(message)] };

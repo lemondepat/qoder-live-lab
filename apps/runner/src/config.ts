@@ -1,5 +1,8 @@
 import { resolve } from "node:path";
 
+export const DEFAULT_AGENT_TIMEOUT_MS = 20 * 60_000;
+export const DEFAULT_TOTAL_TIMEOUT_MS = 25 * 60_000;
+
 export type RunnerConfig = ReturnType<typeof loadConfig>;
 
 export function loadConfig() {
@@ -21,8 +24,8 @@ export function loadConfig() {
     vercelToken: process.env.VERCEL_TOKEN,
     vercelProjectId: process.env.VERCEL_SHOWCASE_PROJECT_ID,
     showcaseUrl: process.env.SHOWCASE_BASE_URL || process.env.NEXT_PUBLIC_SHOWCASE_URL || `${process.env.CONTROL_BASE_URL || "http://localhost:3000"}/showcase`,
-    taskTimeoutMs: Number(process.env.AGENT_TIMEOUT_MS || 180_000),
-    totalTimeoutMs: Number(process.env.TASK_TIMEOUT_MS || 300_000),
+    taskTimeoutMs: Number(process.env.AGENT_TIMEOUT_MS || DEFAULT_AGENT_TIMEOUT_MS),
+    totalTimeoutMs: Number(process.env.TASK_TIMEOUT_MS || DEFAULT_TOTAL_TIMEOUT_MS),
     pollMs: Number(process.env.RUNNER_POLL_MS || 2_000),
     marketFeedProvider: process.env.MARKET_FEED_PROVIDER || "off",
     longbridgeBinary: process.env.LONGBRIDGE_BINARY || "/opt/homebrew/bin/longbridge",
