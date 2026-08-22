@@ -28,8 +28,9 @@ export const metadata: Metadata = {
     images: ["/og.png"],
   },
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: [{ url: "/qoder-favicon.png", type: "image/png", sizes: "64x64" }],
+    shortcut: "/qoder-favicon.png",
+    apple: [{ url: "/qoder-apple-touch-icon.png", type: "image/png", sizes: "180x180" }],
   },
 };
 
