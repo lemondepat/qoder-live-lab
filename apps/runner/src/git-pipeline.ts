@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { evaluateChanges } from "@qoder-live-lab/contracts/policy";
 import type { PolicyDecision } from "@qoder-live-lab/contracts";
+import { CANDIDATE_VERIFICATION_ARGS } from "./candidate-verification";
 import type { RunnerConfig } from "./config";
 
 const exec = promisify(execFile);
@@ -12,11 +13,19 @@ const exec = promisify(execFile);
 export type Candidate = { branch: string; commitSha: string; files: string[]; diff: string; policy: PolicyDecision; testSummary?: string };
 export type GitHubCheck = { name: string; status: string; conclusion: string | null };
 export type RequiredCheckState = "missing" | "pending" | "success" | "failed";
+type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>;
+type FetchRetryOptions = {
+  attempts?: number;
+  initialDelayMs?: number;
+  label?: string;
+  fetchImpl?: FetchLike;
+  sleepImpl?: (ms: number) => Promise<void>;
+};
 
 export async function inspectAndVerify(branch: string, config: RunnerConfig): Promise<Candidate> {
   if (config.dryRun) {
     const files = ["apps/showcase/src/Showcase.tsx", "apps/showcase/src/showcase.css"];
-    return { branch, commitSha: "dry-run-candidate", files, diff: "+ bounded visual change", policy: evaluateChanges(files, "+ bounded visual change"), testSummary: "Dry-run policy and build simulation passed" };
+    return { branch, commitSha: "dry-run-candidate", files, diff: "+ bounded visual change", policy: evaluateChanges(files, "+ bounded visual change"), testSummary: "Dry-run policy and candidate verification simulation passed" };
   }
   await git(config.repositoryPath, ["fetch", "origin", `${branch}:${branch}`]);
   const commitSha = (await git(config.repositoryPath, ["rev-parse", branch])).trim();
@@ -30,8 +39,12 @@ export async function inspectAndVerify(branch: string, config: RunnerConfig): Pr
   try {
     await git(config.repositoryPath, ["worktree", "add", "--detach", worktree, branch]);
     await exec("npm", ["ci", "--ignore-scripts", "--prefer-offline"], { cwd: worktree, timeout: 90_000, maxBuffer: 8 * 1024 * 1024 });
-    await exec("npm", ["run", "build", "--workspace", "@qoder-live-lab/showcase"], { cwd: worktree, timeout: 60_000, maxBuffer: 8 * 1024 * 1024 });
-    return { branch, commitSha, files, diff, policy, testSummary: "Policy passed · Showcase build passed" };
+    try {
+      await exec("npm", [...CANDIDATE_VERIFICATION_ARGS], { cwd: worktree, timeout: 240_000, maxBuffer: 16 * 1024 * 1024 });
+    } catch (error) {
+      throw new Error("Candidate verification checks failed before pull request creation", { cause: error });
+    }
+    return { branch, commitSha, files, diff, policy, testSummary: "Policy, tests, lint, Showcase build, and control build passed" };
   } finally {
     await git(config.repositoryPath, ["worktree", "remove", "--force", worktree]).catch(() => undefined);
     await rm(worktree, { recursive: true, force: true });
@@ -79,6 +92,30 @@ export function requiredCheckState(checks: GitHubCheck[], requiredName = "verify
   return required.every((check) => check.conclusion === "success") ? "success" : "failed";
 }
 
+export async function fetchWithRetry(input: string | URL, init: RequestInit = {}, options: FetchRetryOptions = {}) {
+  const attempts = Math.max(1, options.attempts ?? 3);
+  const initialDelayMs = Math.max(0, options.initialDelayMs ?? 500);
+  const label = options.label || "Network request";
+  const fetchImpl = options.fetchImpl || fetch;
+  const sleepImpl = options.sleepImpl || sleep;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetchImpl(input, init);
+      if (!retryableStatus(response.status)) return response;
+      if (attempt === attempts) throw new Error(`HTTP ${response.status}`);
+      await response.body?.cancel().catch(() => undefined);
+    } catch (error) {
+      if (attempt === attempts) {
+        throw new Error(`${label} failed after ${attempts} attempts: ${errorMessage(error)}`, { cause: error });
+      }
+    }
+    await sleepImpl(initialDelayMs * 2 ** (attempt - 1));
+  }
+
+  throw new Error(`${label} failed after ${attempts} attempts`);
+}
+
 export async function findPreview(candidate: Candidate, config: RunnerConfig, presetFeatureId?: string) {
   if (config.dryRun) {
     const preview = new URL(config.showcaseUrl);
@@ -87,18 +124,34 @@ export async function findPreview(candidate: Candidate, config: RunnerConfig, pr
   }
   if (!config.vercelToken || !config.vercelProjectId) throw new Error("Vercel Preview credentials are required in live mode");
   const deadline = Date.now() + 75_000;
+  let lastNetworkError = "";
   while (Date.now() < deadline) {
     const url = new URL("https://api.vercel.com/v6/deployments");
     url.searchParams.set("projectId", config.vercelProjectId);
     url.searchParams.set("limit", "10");
-    const response = await fetch(url, { headers: { authorization: `Bearer ${config.vercelToken}` } });
+    let response: Response;
+    try {
+      response = await fetchWithRetry(url, { headers: { authorization: `Bearer ${config.vercelToken}` } }, { label: "Vercel deployment lookup" });
+    } catch (error) {
+      lastNetworkError = errorMessage(error);
+      await sleep(3000);
+      continue;
+    }
+    if (response.status === 401 || response.status === 403) throw new Error(`Vercel deployment lookup failed: HTTP ${response.status}`);
     if (response.ok) {
       const data = await response.json() as { deployments: Array<{ url: string; state: string; meta?: Record<string, string> }> };
       const deployment = data.deployments.find((item) => item.meta?.githubCommitSha === candidate.commitSha);
       if (deployment?.state === "ERROR") throw new Error("Vercel preview failed");
       if (deployment?.state === "READY") {
         const preview = `https://${deployment.url}`;
-        const health = await fetch(preview, { redirect: "manual" });
+        let health: Response;
+        try {
+          health = await fetchWithRetry(preview, { redirect: "manual" }, { label: "Vercel preview health check" });
+        } catch (error) {
+          lastNetworkError = errorMessage(error);
+          await sleep(3000);
+          continue;
+        }
         const failure = previewHealthFailure({
           status: health.status,
           contentType: health.headers.get("content-type"),
@@ -111,7 +164,8 @@ export async function findPreview(candidate: Candidate, config: RunnerConfig, pr
     }
     await sleep(3000);
   }
-  throw new Error("Vercel preview exceeded the release time budget");
+  const detail = lastNetworkError ? ` Last network error: ${lastNetworkError}` : "";
+  throw new Error(`Vercel preview exceeded the release time budget.${detail}`);
 }
 
 export function previewHealthFailure(input: { status: number; contentType?: string | null; location?: string | null; body: string }) {
@@ -150,6 +204,8 @@ function parseRepository(value: string) {
   if (!match) throw new Error("GITHUB_REPOSITORY_URL must point to github.com/owner/repository");
   return match[1];
 }
+function retryableStatus(status: number) { return status === 408 || status === 429 || status >= 500; }
+function errorMessage(error: unknown) { return error instanceof Error ? error.message : String(error); }
 function github(config: RunnerConfig, path: string, init: RequestInit = {}) {
   return fetch(`https://api.github.com${path}`, { ...init, headers: { authorization: `Bearer ${config.githubToken}`, accept: "application/vnd.github+json", "content-type": "application/json", "x-github-api-version": "2022-11-28", ...init.headers } });
 }

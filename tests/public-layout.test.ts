@@ -21,7 +21,9 @@ test("the public experience is a fixed-screen nav switcher", async () => {
   assert.match(page, /QODER CLOUD AGENT PROGRESS/);
   assert.match(page, /label: "Failed Changes"/);
   assert.doesNotMatch(page, /02 \/ LIVE PIPELINE/);
-  assert.match(page, /aria-label="Live Pipeline"/);
+  assert.match(page, /<span>02<\/span> Pipeline/);
+  assert.match(page, /aria-label="Pipeline"/);
+  assert.doesNotMatch(page, /Live Pipeline/);
   assert.doesNotMatch(page, /pipeline-heading-v2/);
   assert.match(page, /aria-haspopup="dialog"/);
   assert.match(page, /role="dialog" aria-modal="true"/);
@@ -65,6 +67,11 @@ test("the public experience protects phone scan, keyboard, and touch workflows",
   assert.match(styles, /height:calc\(100dvh - 64px - env\(safe-area-inset-top\)\)/);
   assert.match(styles, /env\(safe-area-inset-top\)/);
   assert.match(styles, /env\(safe-area-inset-bottom\)/);
+  assert.match(styles, /\.public-pages-v2 \{[^}]*width:min\(100%,226px\);/);
+  assert.match(styles, /\.public-pages-v2 button \{[^}]*min-height:32px;[^}]*font-size:9px;/);
+  assert.match(styles, /\.turn-card-v2 \{[^}]*grid-template-rows:auto auto auto auto minmax\(112px,1fr\) auto;/);
+  assert.match(styles, /\.turn-card-v2>header span \{ font-size:7px; \}/);
+  assert.match(styles, /\.turn-request-v2 textarea \{[^}]*min-height:112px;[^}]*height:100%;/);
   assert.match(styles, /\.turn-name-v2 input \{[\s\S]*?font-size:16px;/);
   assert.match(styles, /:has\(\.turn-name-v2 input:focus,\.turn-request-v2 textarea:focus\)/);
   assert.match(styles, /scroll-snap-type:x mandatory/);
@@ -81,8 +88,8 @@ test("the Stage bar matches the public header height and starting edge", async (
   assert.match(styles, /--q-header-inline:clamp\(20px,3\.2vw,52px\)/);
   assert.match(styles, /\.stage-shell \{[^}]*grid-template-rows:72px 1fr;/);
   assert.match(styles, /\.stage-bar \{[^}]*padding:0 var\(--q-header-inline\);/);
-  assert.match(styles, /\.stage-brand>b \{[^}]*font:700 27px\/1 var\(--font-sulphur-point\)/);
-  assert.match(styles, /\.public-brand-v2>b \{[^}]*font:700 27px\/1 var\(--font-sulphur-point\)/);
+  assert.match(styles, /\.stage-brand>b \{[^}]*transform:translateY\(4px\);[^}]*color:#c9cdc5;[^}]*font:700 20px\/1 var\(--font-sulphur-point\)/);
+  assert.match(styles, /\.public-brand-v2>b \{[^}]*transform:translateY\(4px\);[^}]*color:#c9cdc5;[^}]*font:700 20px\/1 var\(--font-sulphur-point\)/);
   assert.match(styles, /\.public-header-v2 \{[\s\S]*?height:72px;/);
   assert.match(styles, /\.public-header-v2 \{[\s\S]*?padding:0 var\(--q-header-inline\);/);
   assert.match(styles, /@media\(max-width:760px\)\{[\s\S]*?\.stage-shell\{grid-template-rows:64px 1fr\}/);
@@ -118,8 +125,5 @@ test("CI applies the candidate diff boundary only to isolated QCA task branches"
   const workflow = await readFile(new URL("../.github/workflows/candidate.yml", import.meta.url), "utf8");
 
   assert.match(workflow, /name: Enforce candidate boundary\n\s+if: startsWith\(github\.head_ref, 'qll\/task-'\)/);
-  assert.match(workflow, /- run: npm test/);
-  assert.match(workflow, /- run: npm run lint/);
-  assert.match(workflow, /- run: npm run build --workspace @qoder-live-lab\/showcase/);
-  assert.match(workflow, /- run: npm run build\n/);
+  assert.match(workflow, /- run: npm run verify:candidate/);
 });
