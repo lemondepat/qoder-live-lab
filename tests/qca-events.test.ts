@@ -15,7 +15,7 @@ test("reserves twenty minutes for QCA and five minutes for release checks", () =
     assert.equal(config.taskTimeoutMs, 1_200_000);
     assert.equal(config.totalTimeoutMs, 1_500_000);
     assert.equal(config.marketPublishMs, 20_000);
-    assert.equal(config.marketIntradayRefreshMs, 60_000);
+    assert.equal("marketIntradayRefreshMs" in config, false);
   } finally {
     if (previousAgentTimeout === undefined) delete process.env.AGENT_TIMEOUT_MS;
     else process.env.AGENT_TIMEOUT_MS = previousAgentTimeout;

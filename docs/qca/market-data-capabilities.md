@@ -54,7 +54,9 @@ type MarketIntradayPoint = {
 };
 ```
 
-The Runner requests `quote.intraday` with the `intraday` trade-session mode for all trusted instruments. A complete Hong Kong trading day normally contains about 331 minute points covering 09:30–16:00 HKT with the lunch break. The quote snapshot is published every 20 seconds; the full minute history is refreshed every 60 seconds. `intraday` can be empty while the feed is connecting or in demo fallback, so every view needs an honest empty state.
+The Runner requests `quote.intraday` with the `intraday` trade-session mode once for every trusted instrument when its shared Longbridge session starts. It then folds official `quote.updated` pushes into the current minute on the Runner, using cumulative volume and turnover to deduplicate replayed ticks. If the connection drops, the last good snapshot stays public; after reconnecting, the Runner subscribes again and requests `quote.intraday` once to fill the gap. There is no full-history polling timer. A complete Hong Kong trading day normally contains about 331 minute points covering 09:30–16:00 HKT with the lunch break, and the sanitized shared snapshot is published every 20 seconds.
+
+All browsers read that same server-owned snapshot. They never create their own Longbridge connection or multiply provider calls. `intraday` can still be empty while the first backfill is connecting or in demo fallback, so every view needs an honest empty state.
 
 For index charts, use `price`, `timestamp`, `volume`, and `previousClose`. Do not label `averagePrice` as VWAP for an index. For equities, `averagePrice` may be shown only when present.
 
@@ -74,7 +76,11 @@ Keep derivations deterministic and based only on hook values. Never invent a mis
 The trusted implementation is pinned to Longbridge's official APIs:
 
 - Intraday line: https://open.longbridge.com/docs/quote/pull/intraday
+- Real-time quote push: https://open.longbridge.com/docs/quote/subscribe/quote
 - Node.js `QuoteContext.intraday`: https://longbridge.github.io/openapi/nodejs/classes/QuoteContext.html#intraday
-- Candlesticks, if the trusted contract is extended by an operator later: https://open.longbridge.com/docs/quote/pull/candlestick
+- Node.js `QuoteContext.subscribeCandlesticks`, if the trusted Runner transport is extended by an operator later: https://longbridge.github.io/openapi/nodejs/classes/QuoteContext.html#subscribecandlesticks
+- Candlestick pull API, if the trusted contract is extended by an operator later: https://open.longbridge.com/docs/quote/pull/candlestick
 
 These links are documentation for maintainers. Candidate code must not access them at runtime. If a requested market fact is not listed in this contract, use `DECLINED` or build an honest empty state; do not guess an API.
+
+The trusted Runner has a read-only capability catalog for one-minute OHLC candles, security metadata, valuation/activity indexes, market temperature, trading calendars, capital flow, depth, trades, and broker queues. Those facts are **not** part of `MarketFeedView` yet. A candidate must not assume they exist until this contract explicitly publishes their typed fields.
