@@ -86,3 +86,23 @@ test("the Stage bar matches the public header height and starting edge", async (
   assert.match(styles, /@media\(max-width:820px\) \{[\s\S]*?:root \{ --q-header-inline:18px; \}/);
   assert.match(styles, /@media\(max-width:820px\) \{[\s\S]*?\.public-header-v2 \{ height:64px;/);
 });
+
+test("public read paths refresh every twenty seconds behind a shared cache", async () => {
+  const [page, stage, ops, marketFeed, boardRoute, marketRoute] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/stage/stage-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/ops/ops-client.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../apps/showcase/src/market-feed.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/board/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/market/route.ts", import.meta.url), "utf8"),
+  ]);
+
+  for (const client of [page, stage, ops, marketFeed]) {
+    assert.match(client, /setInterval\([\s\S]*?20_000\)/);
+    assert.doesNotMatch(client, /cache:\s*"no-store"/);
+  }
+  for (const route of [boardRoute, marketRoute]) {
+    assert.match(route, /s-maxage=15/);
+    assert.match(route, /stale-if-error=60/);
+  }
+});

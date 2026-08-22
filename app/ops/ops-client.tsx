@@ -15,14 +15,14 @@ export function OpsClient() {
 
   async function refresh() {
     const [nextBoard, nextMarket] = await Promise.all([
-      fetch("/api/board", { cache: "no-store" }).then((response) => response.json()) as Promise<BoardSnapshot>,
-      fetch("/api/market", { cache: "no-store" }).then((response) => response.json()) as Promise<MarketSnapshot>,
+      fetch("/api/board").then((response) => response.json()) as Promise<BoardSnapshot>,
+      fetch("/api/market").then((response) => response.json()) as Promise<MarketSnapshot>,
     ]);
     setBoard(nextBoard);
     setMarket(nextMarket);
   }
 
-  useEffect(() => { const kickoff = window.setTimeout(() => refresh().catch(() => undefined), 0); const timer = window.setInterval(() => refresh().catch(() => undefined), 2000); return () => { window.clearTimeout(kickoff); window.clearInterval(timer); }; }, []);
+  useEffect(() => { const kickoff = window.setTimeout(() => refresh().catch(() => undefined), 0); const timer = window.setInterval(() => refresh().catch(() => undefined), 20_000); return () => { window.clearTimeout(kickoff); window.clearInterval(timer); }; }, []);
 
   async function login() {
     const response = await fetch("/api/ops/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ passcode }) });

@@ -58,7 +58,7 @@ footer { display:flex; justify-content:space-between; padding:26px 4vw; border-t
 .qoder-brand-icon { flex:none;display:block;background:url("/qoder-favicon-v2.png") center/cover no-repeat; }
 .stage-brand { display:flex;align-items:center;width:max-content;gap:13px; }
 .stage-brand img { width:138px;height:auto;display:block; }
-.stage-brand>b { font:700 27px/1 var(--font-sulphur-point),"Sulphur Point",sans-serif;letter-spacing:-.035em;white-space:nowrap; }
+.stage-brand>b { transform:translateY(3px);font:700 27px/1 var(--font-sulphur-point),"Sulphur Point",sans-serif;letter-spacing:-.035em;white-space:nowrap; }
 .stage-now { min-width:0;display:grid;gap:5px;border-left:1px solid #303037;padding-left:24px; }.stage-now span { overflow:hidden;color:#805dff;font:800 9px monospace;letter-spacing:.1em;text-overflow:ellipsis;white-space:nowrap; }.stage-now span em { color:#858a82;font-style:normal;letter-spacing:.06em; }.stage-now strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .stage-version { display:flex;align-items:center;gap:14px; }
 .stage-qr { display:flex;align-items:center;gap:8px; }.stage-qr span { color:#8d8d98;text-align:right;font:700 8px/1.2 monospace;letter-spacing:.08em; }

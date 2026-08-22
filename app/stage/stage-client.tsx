@@ -17,7 +17,7 @@ export function StageClient() {
   useEffect(() => {
     let active = true;
     const load = async () => {
-      const next = await fetch("/api/board", { cache: "no-store" }).then((response) => response.json()) as BoardSnapshot;
+      const next = await fetch("/api/board").then((response) => response.json()) as BoardSnapshot;
       if (!active) return;
       setBoard(next);
       const latest = next.requests.find((item) => item.status === "blocked" || item.status === "rejected");
@@ -32,7 +32,7 @@ export function StageClient() {
       }
     };
     load().catch(() => undefined);
-    const timer = window.setInterval(() => load().catch(() => undefined), 2000);
+    const timer = window.setInterval(() => load().catch(() => undefined), 20_000);
     return () => { active = false; window.clearInterval(timer); window.clearTimeout(hideBlockedTimer.current); };
   }, []);
 

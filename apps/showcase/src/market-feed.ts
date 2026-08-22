@@ -52,7 +52,7 @@ export function useMarketFeed() {
 
     const refresh = async () => {
       try {
-        const response = await fetch(endpoint, { cache: "no-store" });
+        const response = await fetch(endpoint);
         if (!response.ok) throw new Error(`Market feed returned ${response.status}`);
         const snapshot = await response.json() as ApiSnapshot;
         if (!active || !validSnapshot(snapshot)) return;
@@ -64,7 +64,7 @@ export function useMarketFeed() {
     };
 
     void refresh();
-    const timer = window.setInterval(refresh, 2_000);
+    const timer = window.setInterval(refresh, 20_000);
     return () => { active = false; window.clearInterval(timer); };
   }, []);
 

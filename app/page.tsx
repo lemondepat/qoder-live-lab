@@ -75,13 +75,13 @@ export default function Home() {
   useEffect(() => {
     let active = true;
     const refresh = async () => {
-      const response = await fetch("/api/board", { cache: "no-store" });
+      const response = await fetch("/api/board");
       if (!response.ok) return;
       const next = await response.json() as BoardSnapshot;
       if (active) setBoard(next);
     };
     const kickoff = window.setTimeout(() => refresh().catch(() => undefined), 0);
-    const timer = window.setInterval(() => refresh().catch(() => undefined), 2000);
+    const timer = window.setInterval(() => refresh().catch(() => undefined), 20_000);
     return () => {
       active = false;
       window.clearTimeout(kickoff);
