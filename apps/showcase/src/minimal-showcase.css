@@ -1,0 +1,56 @@
+:root {
+  color-scheme: light;
+  background: #fff;
+  color: #000;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  background: #fff;
+  color: #000;
+}
+
+.minimal-hsi {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow: hidden;
+  background: #fff;
+  color: #000;
+}
+
+.minimal-hsi section {
+  display: grid;
+  gap: 10px;
+  text-align: left;
+}
+
+.minimal-hsi span {
+  font-size: clamp(18px, 2.2vw, 30px);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.minimal-hsi strong {
+  font-size: clamp(54px, 10vw, 152px);
+  font-weight: 700;
+  line-height: .9;
+  letter-spacing: -.07em;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 520px) {
+  .minimal-hsi {
+    place-items: center start;
+  }
+}

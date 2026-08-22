@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const showcase = readFileSync(fileURLToPath(new URL("../src/Showcase.tsx", import.meta.url)), "utf8");
+const showcase = readFileSync(fileURLToPath(new URL("../src/RichShowcase.tsx", import.meta.url)), "utf8");
 const css = readFileSync(fileURLToPath(new URL("../src/showcase.css", import.meta.url)), "utf8");
 
 test("renders the GAIN/LOSS/FLAT legend on the watchlist header row", () => {

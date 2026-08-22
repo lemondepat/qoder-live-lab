@@ -68,7 +68,7 @@ test("normalized trail maps the trusted tail onto 0..100 without inventing point
 });
 
 test("the showcase renders the sector heatmap board instead of the plain table", () => {
-  const showcase = readFileSync(fileURLToPath(new URL("../src/Showcase.tsx", import.meta.url)), "utf8");
+  const showcase = readFileSync(fileURLToPath(new URL("../src/RichShowcase.tsx", import.meta.url)), "utf8");
   assert.match(showcase, /<SectorHeatmapBoard\b/);
   assert.doesNotMatch(showcase, /plain-table/);
   assert.match(showcase, /useMarketFeed\(\)/);
