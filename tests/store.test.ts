@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createBoundaryChallenge, createRequest, finishRequest, getBoard, resetOpeningRelease, setSystem } from "../lib/store";
+import { createBoundaryChallenge, createRequest, finishRequest, getBoard, getMarketSnapshot, resetOpeningRelease, setSystem, writeMarketSnapshot } from "../lib/store";
 
 test("creates an allowed request in the queue idempotently", async () => {
   const input = { author: "Tester", title: "Add a soft aurora that responds to pointer movement", idempotencyKey: "test-idempotency-1" };
@@ -39,4 +39,23 @@ test("resets the Stage to the immutable, intentionally simple opening release", 
   assert.equal(board.system.activeRelease.version, "v0.4");
   assert.match(board.system.activeRelease.previewUrl, /qoder-live-lab-canvas-8d0qaj3j9/);
   assert.notEqual(board.system.previousRelease?.version, "v0.4");
+});
+
+test("persists a sanitized Longbridge snapshot for the public read path", async () => {
+  const timestamp = new Date().toISOString();
+  await writeMarketSnapshot({
+    source: "longbridge",
+    providerLabel: "LONG BRIDGE OPENAPI",
+    status: "live",
+    session: "afternoon",
+    receivedAt: timestamp,
+    marketTimestamp: timestamp,
+    sequence: 7,
+    indices: [],
+    quotes: [{ symbol: "0700", vendorSymbol: "700.HK", name: "Tencent", sector: "Internet", kind: "equity", currency: "HKD", last: 448.6, prevClose: 442.4, open: 438.2, high: 450, low: 437.8, change: 6.2, changePercent: 1.4, volume: 12_441_624, turnover: 5_570_000_000, timestamp, trail: [442.4, 448.6] }],
+  });
+  const snapshot = await getMarketSnapshot();
+  assert.equal(snapshot.source, "longbridge");
+  assert.equal(snapshot.sequence, 7);
+  assert.equal(snapshot.quotes[0]?.last, 448.6);
 });

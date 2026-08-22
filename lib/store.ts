@@ -3,6 +3,7 @@ import type {
   BoardSnapshot,
   ChangeRequest,
   CreateRequestInput,
+  MarketSnapshot,
   PolicyDecision,
   RequestEvent,
   RequestStatus,
@@ -12,7 +13,7 @@ import { TERMINAL_STATUSES } from "@qoder-live-lab/contracts";
 import { evaluateInput } from "@qoder-live-lab/contracts/policy";
 
 type StoredRequest = ChangeRequest & { idempotencyKey: string };
-type MemoryStore = { requests: StoredRequest[]; system: SystemState; initialized: boolean };
+type MemoryStore = { requests: StoredRequest[]; system: SystemState; market: MarketSnapshot; initialized: boolean };
 
 const now = () => new Date().toISOString();
 const baselinePreviewUrl = process.env.BASELINE_PREVIEW_URL || "https://qoder-live-lab-canvas-8d0qaj3j9-qt-eam1.vercel.app";
@@ -31,6 +32,29 @@ const defaultSystem: SystemState = {
   activeRequestId: "QLL-018",
   activeRelease: defaultRelease,
   runnerLastSeenAt: new Date(Date.now() - 8000).toISOString(),
+};
+
+const defaultMarketSnapshot: MarketSnapshot = {
+  source: "demo",
+  providerLabel: "DEMO SNAPSHOT",
+  status: "demo",
+  session: "afternoon",
+  receivedAt: now(),
+  marketTimestamp: now(),
+  sequence: 0,
+  indices: [
+    demoQuote("HSI", "HSI.HK", "Hang Seng", "Broad market", "index", 25412.8, 25200.71, 0),
+    demoQuote("HSTECH", "HSTECH.HK", "Hang Seng TECH", "Technology", "index", 5678.31, 5598.81, 0),
+    demoQuote("HSCEI", "HSCEI.HK", "China Enterprises", "China enterprises", "index", 9082.16, 9025.3, 0),
+  ],
+  quotes: [
+    demoQuote("9988", "9988.HK", "Alibaba", "Internet", "equity", 124.8, 121.9, 48_200_000),
+    demoQuote("0700", "700.HK", "Tencent", "Internet", "equity", 586.5, 580, 16_800_000),
+    demoQuote("3690", "3690.HK", "Meituan", "Consumer", "equity", 132.4, 133.31, 27_100_000),
+    demoQuote("1810", "1810.HK", "Xiaomi", "Hardware", "equity", 55.2, 53.57, 102_000_000),
+    demoQuote("1211", "1211.HK", "BYD", "Mobility", "equity", 116.7, 118.19, 35_400_000),
+    demoQuote("1024", "1024.HK", "Kuaishou", "Media", "equity", 79.6, 79.24, 21_900_000),
+  ],
 };
 
 const seededRequests: StoredRequest[] = [
@@ -53,7 +77,7 @@ function makeSeed(id: string, title: string, author: string, status: RequestStat
 }
 
 const globalStore = globalThis as typeof globalThis & { __qllStore?: MemoryStore };
-const memory = globalStore.__qllStore ??= { requests: structuredClone(seededRequests), system: structuredClone(defaultSystem), initialized: true };
+const memory = globalStore.__qllStore ??= { requests: structuredClone(seededRequests), system: structuredClone(defaultSystem), market: structuredClone(defaultMarketSnapshot), initialized: true };
 let schemaReady: Promise<void> | undefined;
 
 function databaseUrl() {
@@ -77,6 +101,11 @@ async function ensureSchema() {
       payload jsonb NOT NULL,
       updated_at timestamptz NOT NULL DEFAULT now()
     )`;
+    await sql`CREATE TABLE IF NOT EXISTS qll_market_snapshot (
+      id integer PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+      payload jsonb NOT NULL,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )`;
     const existing = await sql`SELECT count(*)::int AS count FROM qll_requests`;
     const count = Number(existing[0]?.count ?? 0);
     if (count === 0 && process.env.SEED_DEMO_DATA !== "false") {
@@ -85,6 +114,7 @@ async function ensureSchema() {
       }
     }
     await sql`INSERT INTO qll_system (id, payload) VALUES (1, ${JSON.stringify(defaultSystem)}::jsonb) ON CONFLICT (id) DO NOTHING`;
+    await sql`INSERT INTO qll_market_snapshot (id, payload) VALUES (1, ${JSON.stringify(defaultMarketSnapshot)}::jsonb) ON CONFLICT (id) DO NOTHING`;
   })();
   return schemaReady;
 }
@@ -130,6 +160,34 @@ async function writeSystem(system: SystemState) {
 export async function getBoard(): Promise<BoardSnapshot> {
   const [requests, system] = await Promise.all([readRequests(), readSystem()]);
   return { requests, system, generatedAt: now() };
+}
+
+export async function getMarketSnapshot(): Promise<MarketSnapshot> {
+  const url = databaseUrl();
+  const snapshot = url
+    ? await (async () => {
+        await ensureSchema();
+        const rows = await neon(url)`SELECT payload FROM qll_market_snapshot WHERE id = 1`;
+        return (rows[0]?.payload as MarketSnapshot | undefined) ?? defaultMarketSnapshot;
+      })()
+    : memory.market;
+  if (snapshot.source === "longbridge" && Date.now() - new Date(snapshot.receivedAt).getTime() > 15_000) {
+    return { ...snapshot, status: "stale" };
+  }
+  return snapshot;
+}
+
+export async function writeMarketSnapshot(snapshot: MarketSnapshot): Promise<MarketSnapshot> {
+  const url = databaseUrl();
+  if (!url) {
+    memory.market = structuredClone(snapshot);
+    return snapshot;
+  }
+  await ensureSchema();
+  await neon(url)`INSERT INTO qll_market_snapshot (id, payload, updated_at)
+    VALUES (1, ${JSON.stringify(snapshot)}::jsonb, now())
+    ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()`;
+  return snapshot;
 }
 
 export async function createRequest(input: CreateRequestInput): Promise<ChangeRequest> {
@@ -276,6 +334,38 @@ export async function resetOpeningRelease() {
 
 function makeEvent(requestId: string, kind: RequestEvent["kind"], message: string): RequestEvent {
   return { id: `evt-${crypto.randomUUID()}`, requestId, kind, message, createdAt: now() };
+}
+
+function demoQuote(
+  symbol: string,
+  vendorSymbol: string,
+  name: string,
+  sector: string,
+  kind: "index" | "equity",
+  last: number,
+  prevClose: number,
+  volume: number,
+) {
+  const change = last - prevClose;
+  return {
+    symbol,
+    vendorSymbol,
+    name,
+    sector,
+    kind,
+    currency: "HKD",
+    last,
+    prevClose,
+    open: prevClose,
+    high: Math.max(last, prevClose),
+    low: Math.min(last, prevClose),
+    change,
+    changePercent: prevClose ? (change / prevClose) * 100 : 0,
+    volume,
+    turnover: volume * last,
+    timestamp: now(),
+    trail: [prevClose, prevClose * 1.002, last * 0.998, last],
+  };
 }
 
 export function publicPolicy(decision: PolicyDecision): PolicyDecision {

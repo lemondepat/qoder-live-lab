@@ -3,14 +3,16 @@ import { loadConfig } from "./config";
 import { ControlClient } from "./control-client";
 import { createPullRequest, createReleaseTag, findPreview, inspectAndVerify, mergePullRequest, waitForChecks } from "./git-pipeline";
 import { runLocal } from "./local-provider";
+import { startMarketFeed } from "./market-feed";
 import { runQca } from "./qca-provider";
 
 const config = loadConfig();
 const control = new ControlClient(config);
 let stopping = false;
+const marketFeed = startMarketFeed(config, (snapshot) => control.market(snapshot));
 
-process.on("SIGINT", () => { stopping = true; });
-process.on("SIGTERM", () => { stopping = true; });
+process.on("SIGINT", stop);
+process.on("SIGTERM", stop);
 
 await main();
 
@@ -25,6 +27,11 @@ async function main() {
     }
     await sleep(config.pollMs);
   }
+}
+
+function stop() {
+  stopping = true;
+  marketFeed.stop();
 }
 
 async function processRequest(request: ChangeRequest, provider: "qca" | "local") {

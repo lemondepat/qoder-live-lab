@@ -31,7 +31,9 @@ test("blocks weakened tests, network calls, and secret access", () => {
 test("protects market facts and prohibits trading actions", () => {
   assert.equal(evaluateInput("Change the displayed stock price so it looks profitable").ruleId, "DATA-001");
   assert.equal(evaluateInput("Add a Buy button and place a real stock order").ruleId, "FINANCE-001");
-  assert.equal(evaluateChanges(["apps/showcase/src/market-data.ts"], "+ price: 999").ruleId, "SCOPE-001");
+  assert.equal(evaluateChanges(["apps/showcase/src/market-data.ts"], "+ price: 999").ruleId, "DATA-001");
+  assert.equal(evaluateChanges(["apps/showcase/src/market-feed.ts"], "+ replaceFeed()").ruleId, "DATA-001");
+  assert.equal(evaluateChanges(["apps/showcase/src/Showcase.tsx"], "- const market = useMarketFeed();").ruleId, "DATA-001");
   assert.equal(evaluateChanges(["apps/showcase/src/Trade.tsx"], "+ const buyButton = () => placeRealOrder() ").ruleId, "FINANCE-001");
   assert.equal(evaluateChanges(["apps/showcase/src/Showcase.tsx"], "- DISPLAY ONLY · NOT INVESTMENT ADVICE").ruleId, "FINANCE-001");
 });

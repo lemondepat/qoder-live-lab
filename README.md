@@ -1,6 +1,6 @@
 # Qoder Live Lab
 
-An event-ready live development lab for Qoder Cloud Agents. Visitors submit a bounded improvement to an intentionally sparse Hong Kong market dashboard, watch it move across a public board, and see a verified release appear on the stage display. Unsafe requests and out-of-scope changes are visibly blocked while the current release stays live.
+An event-ready live development lab for Qoder Cloud Agents. Visitors submit an ambitious but bounded transformation to an intentionally sparse Hong Kong market dashboard, watch it move across a public board, and see a verified release appear on the stage display. A trusted Longbridge feed supplies real Hong Kong market facts; unsafe requests and out-of-scope changes are visibly blocked while the current release stays live.
 
 Live: [Public board](https://qoder-live-lab.vercel.app) · [Release history](https://qoder-live-lab.vercel.app/releases) · [Stage display](https://qoder-live-lab.vercel.app/stage) · [Market canvas](https://qoder-live-lab-canvas.vercel.app)
 
@@ -30,7 +30,21 @@ Qoder only creates a candidate branch. It cannot activate a release. The runner 
 - `packages/contracts/` — shared states, API contracts, and policy rules
 - `tests/` — policy, state, SSE, deduplication, and rendered-route tests
 
-Candidate changes are limited to `apps/showcase/src/**`, `apps/showcase/tests/**`, and `apps/showcase/public/**`. The trusted market fixture, displayed facts, display-only disclaimer, and any trading action remain protected. The complete agent boundary is in `AGENTS.md`.
+Candidate changes are limited to `apps/showcase/src/**`, `apps/showcase/tests/**`, and `apps/showcase/public/**`. Inside that presentation surface, Qoder may replace the full layout, component structure, charts, motion, visual system, filters, and responsive behavior. The trusted market feed, displayed facts, feed status, display-only disclaimer, and any trading action remain protected. The complete agent boundary is in `AGENTS.md`.
+
+## Connect the live Hong Kong market feed
+
+Computer B owns a read-only market-data sidecar. It starts one long-lived Longbridge OpenAPI session, subscribes to the three Hang Seng indices and six watchlist equities, folds quote ticks into a sanitized snapshot, and posts that snapshot to the control plane. Neon stores only public market facts; Longbridge tokens never enter Vercel, the browser, Qoder, or the repository.
+
+Install and authorize the official Longbridge CLI on computer B:
+
+```bash
+brew install --cask longbridge/tap/longbridge-terminal
+longbridge auth login
+longbridge auth status
+```
+
+Set `MARKET_FEED_PROVIDER=longbridge` and the absolute `LONGBRIDGE_BINARY` path in the runner environment. `/api/market` exposes only the validated public snapshot. The Canvas polls this endpoint every two seconds and shows `LIVE`, `STALE`, `DELAYED`, or `DEMO` explicitly. A disconnected feed preserves the last good tick and never invents replacement values.
 
 ## Run locally
 
@@ -105,7 +119,7 @@ Before doors open:
 
 - Put `/stage` fullscreen on computer A and `/ops` plus runner logs on computer B.
 - Start with the deliberately sparse baseline: one index, one plain watchlist, and no advanced visualizations.
-- Use the Feature Launchpad to queue the pre-verified sector heatmap, momentum lens, or market command editions. Live mode still follows the normal Qoder and policy path; dry-run mode is visibly labelled rehearsal fallback.
+- Use the Feature Launchpad to queue a full-screen heatmap, momentum cockpit, market command wall, volatility environment, or closing-bell mode. Live mode still follows the normal Qoder and policy path; dry-run mode is visibly labelled rehearsal fallback.
 - Submit one safe visual request and confirm it reaches `LIVE` within five minutes.
 - Run “Modify the admin control panel” from Ops and confirm `BLOCKED`, a rule ID, redacted evidence, `0 files promoted`, and an unchanged stage canvas.
 - Test pause, cancel, runner restart, Qoder credential failure, and rollback.
