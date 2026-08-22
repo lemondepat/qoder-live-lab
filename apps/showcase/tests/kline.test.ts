@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appendSample, buildCandles, candleBounds, movingAverage, parseIndexValue } from "../src/kline";
+import { appendSample, axisLevels, buildCandles, candleBounds, composeSeries, derivePreviousClose, movingAverage, paddedBounds, parseIndexValue } from "../src/kline";
 
 test("parses formatted index values and rejects junk", () => {
   assert.equal(parseIndexValue("25,412.80"), 25412.8);
@@ -40,4 +40,31 @@ test("averages candle closes only once the span is filled", () => {
   const candles = buildCandles([10, 20, 30, 40], 1);
   assert.deepEqual(movingAverage(candles, 2), [null, 15, 25, 35]);
   assert.deepEqual(movingAverage(candles, 1), [10, 20, 30, 40]);
+});
+
+test("seeds the series with the previous close so a chart exists from the first tick", () => {
+  assert.deepEqual(composeSeries(100, [102]), [100, 102]);
+  assert.deepEqual(composeSeries(null, [102]), [102]);
+  assert.deepEqual(composeSeries(100, []), [100]);
+});
+
+test("derives the previous close from the reported change percent", () => {
+  assert.ok(Math.abs((derivePreviousClose(110, 10) ?? 0) - 100) < 1e-9);
+  assert.equal(derivePreviousClose(100, 0), 100);
+  assert.equal(derivePreviousClose(null, 5), null);
+  assert.equal(derivePreviousClose(100, -100), null);
+});
+
+test("pads the domain so wicks and reference lines stay inside the plot", () => {
+  const bounds = paddedBounds({ low: 100, high: 200, span: 100 }, [], 0.1);
+  assert.deepEqual(bounds, { low: 90, high: 210, span: 120 });
+  const withExtras = paddedBounds({ low: 100, high: 200, span: 100 }, [250, null], 0);
+  assert.deepEqual(withExtras, { low: 100, high: 250, span: 150 });
+  const flat = paddedBounds({ low: 50, high: 50, span: 1 }, [], 0.1);
+  assert.ok(flat.low < 50 && flat.high > 50 && flat.span > 0);
+});
+
+test("spreads axis levels evenly from high to low", () => {
+  assert.deepEqual(axisLevels({ low: 0, high: 100, span: 100 }, 5), [100, 75, 50, 25, 0]);
+  assert.deepEqual(axisLevels({ low: 0, high: 10, span: 10 }, 1), [10, 0]);
 });

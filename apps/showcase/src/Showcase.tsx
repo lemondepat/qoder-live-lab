@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useMarketFeed } from "./market-feed";
 import type { MarketIndex, MarketQuote } from "./market-data";
 import { computeMarketPulse } from "./market-pulse";
-import { appendSample, buildCandles, candleBounds, movingAverage, parseIndexValue, type Candle } from "./kline";
+import { appendSample, axisLevels, buildCandles, candleBounds, composeSeries, derivePreviousClose, movingAverage, paddedBounds, parseIndexValue, type Candle, type CandleBounds } from "./kline";
 import "./showcase.css";
 
 const SAMPLE_LIMIT = 180;
@@ -45,7 +45,7 @@ export function Showcase() {
       <section className="index-row">
         {market.indices.map((index) => <article key={`${index.symbol}-${market.sequence}`}><div><span>{index.symbol}</span><small>{index.label}</small></div><strong>{index.value}</strong><b className={index.change >= 0 ? "up" : "down"}>{index.change >= 0 ? "+" : ""}{index.change.toFixed(2)}%</b></article>)}
       </section>
-      <IndexKLine indices={market.indices} sequence={market.sequence} sessionLabel={sessionLabel} />
+      <IndexKLine indices={market.indices} sequence={market.sequence} sessionLabel={sessionLabel} session={market.session} />
       <MarketPulseStrip quotes={quotes} />
       {edition === "baseline" ? <BaselineTable quotes={quotes} /> : <EnhancedMarket quotes={quotes} edition={edition} />}
       <footer className="market-footer"><span>DISPLAY ONLY · NOT INVESTMENT ADVICE</span><span>{market.source === "longbridge" ? "VERIFIED MARKET DATA" : advanced ? `FEATURE EDITION / ${edition.toUpperCase()}` : "BASELINE RELEASE / INTENTIONALLY SIMPLE"}</span></footer>
@@ -55,7 +55,7 @@ export function Showcase() {
 
 const tickLog = new Map<string, { key: string; values: number[] }>();
 
-function IndexKLine({ indices, sequence, sessionLabel }: { indices: MarketIndex[]; sequence: number; sessionLabel: string }) {
+function IndexKLine({ indices, sequence, sessionLabel, session }: { indices: MarketIndex[]; sequence: number; sessionLabel: string; session: string }) {
   const [focus, setFocus] = useState("HSI");
   const active = indices.find((index) => index.symbol === focus) ?? indices[0] ?? null;
   const activeSymbol = active?.symbol ?? focus;
@@ -71,12 +71,15 @@ function IndexKLine({ indices, sequence, sessionLabel }: { indices: MarketIndex[
 
   const logged = tickLog.get(activeSymbol);
   const samples = observed === null || logged?.key === `${sequence}:${observed}` ? logged?.values ?? [] : [...(logged?.values ?? []), observed];
-  const candles = buildCandles(samples, SAMPLES_PER_CANDLE);
-  const bounds = candleBounds(candles);
+  const previousClose = derivePreviousClose(observed, active?.change ?? 0);
+  const series = composeSeries(previousClose, samples);
+  const candles = buildCandles(series, SAMPLES_PER_CANDLE);
+  const rawBounds = candleBounds(candles);
   const averages = movingAverage(candles, MA_SPAN);
-  const previousClose = active && observed !== null && active.change !== -100 ? observed / (1 + active.change / 100) : null;
+  const bounds = paddedBounds(rawBounds, [previousClose, observed]);
   const latest = candles.length > 0 ? candles[candles.length - 1] : null;
   const tone = (active?.change ?? 0) >= 0 ? "up" : "down";
+  const closed = session === "closed";
 
   return <section className="kline-panel" aria-label={`${activeSymbol} candlestick chart`}>
     <div className="kline-head">
@@ -90,39 +93,45 @@ function IndexKLine({ indices, sequence, sessionLabel }: { indices: MarketIndex[
       <dl className="kline-readout">
         <div><dt>LAST</dt><dd>{active?.value ?? "—"}</dd></div>
         <div><dt>CHANGE</dt><dd className={tone}>{active ? `${active.change >= 0 ? "+" : ""}${active.change.toFixed(2)}%` : "—"}</dd></div>
-        <div><dt>RANGE</dt><dd>{candles.length > 0 ? `${formatLevel(bounds.low)} – ${formatLevel(bounds.high)}` : "—"}</dd></div>
+        <div><dt>PREV CLOSE</dt><dd>{previousClose !== null ? formatLevel(previousClose) : "—"}</dd></div>
+        <div><dt>RANGE</dt><dd>{candles.length > 0 ? `${formatLevel(rawBounds.low)} – ${formatLevel(rawBounds.high)}` : "—"}</dd></div>
         <div><dt>BARS</dt><dd>{candles.length} <i>· {SAMPLES_PER_CANDLE} TICKS</i></dd></div>
       </dl>
     </div>
     <CandleChart candles={candles} bounds={bounds} averages={averages} previousClose={previousClose} symbol={activeSymbol} />
     <div className="kline-foot">
-      <span>{sessionLabel} · MA{MA_SPAN} OVER CANDLE CLOSES</span>
+      <span>{closed ? `${sessionLabel} · SHOWING LAST TRADING DAY` : sessionLabel} · MA{MA_SPAN} OVER CANDLE CLOSES</span>
       {latest && <span className={latest.close >= latest.open ? "up" : "down"}>LATEST BAR O {formatLevel(latest.open)} · H {formatLevel(latest.high)} · L {formatLevel(latest.low)} · C {formatLevel(latest.close)}</span>}
       <span>{samples.length} TICK{samples.length === 1 ? "" : "S"} OBSERVED · DERIVED VIEW, DISPLAY ONLY</span>
     </div>
   </section>;
 }
 
-function CandleChart({ candles, bounds, averages, previousClose, symbol }: { candles: Candle[]; bounds: ReturnType<typeof candleBounds>; averages: (number | null)[]; previousClose: number | null; symbol: string }) {
+function CandleChart({ candles, bounds, averages, previousClose, symbol }: { candles: Candle[]; bounds: CandleBounds; averages: (number | null)[]; previousClose: number | null; symbol: string }) {
   if (candles.length === 0) return <div className="kline-empty">Collecting live ticks for {symbol} — the first candle opens on the next feed update.</div>;
 
   const width = 1000;
-  const height = 300;
-  const slot = width / Math.max(candles.length, 12);
-  const bodyWidth = Math.max(2, Math.min(18, slot * 0.58));
-  const toY = (value: number) => height - ((value - bounds.low) / bounds.span) * (height - 24) - 12;
-  const centre = (index: number) => slot * (index + 0.5);
+  const height = 320;
+  const padY = 18;
+  const padX = 14;
+  const plotWidth = width - padX * 2;
+  // Spread every bar across the whole plot so the chart is always complete,
+  // whether one candle or a full session of them is available.
+  const slot = plotWidth / candles.length;
+  const bodyWidth = Math.max(3, Math.min(26, slot * 0.6));
+  const toY = (value: number) => height - padY - ((value - bounds.low) / bounds.span) * (height - padY * 2);
+  const centre = (index: number) => padX + slot * (index + 0.5);
   const maPoints = averages
     .map((value, index) => (value === null ? null : `${centre(index).toFixed(2)},${toY(value).toFixed(2)}`))
     .filter((point): point is string => point !== null)
     .join(" ");
-  const guides = [bounds.high, bounds.low + bounds.span / 2, bounds.low];
-  const previousY = previousClose !== null && previousClose >= bounds.low && previousClose <= bounds.high ? toY(previousClose) : null;
+  const guides = axisLevels(bounds, 5);
+  const previousY = previousClose !== null ? toY(previousClose) : null;
 
   return <div className="kline-chart">
-    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label={`${symbol} candlestick chart built from ${candles.length} observed candles`}>
-      {guides.map((level, position) => <line key={`guide-${position}`} className="kline-guide" x1={0} x2={width} y1={toY(level)} y2={toY(level)} />)}
-      {previousY !== null && <line className="kline-prev" x1={0} x2={width} y1={previousY} y2={previousY} />}
+    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${symbol} candlestick chart built from ${candles.length} observed candles`}>
+      {guides.map((level, position) => <line key={`guide-${position}`} className="kline-guide" x1={padX} x2={width - padX} y1={toY(level)} y2={toY(level)} />)}
+      {previousY !== null && <line className="kline-prev" x1={padX} x2={width - padX} y1={previousY} y2={previousY} />}
       {candles.map((candle) => {
         const rising = candle.close >= candle.open;
         const top = toY(Math.max(candle.open, candle.close));
