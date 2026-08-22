@@ -1,18 +1,25 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { BoardSnapshot, ChangeRequest, RequestStatus } from "@qoder-live-lab/contracts";
+import {
+  OPENING_RELEASE_REQUEST_ID,
+  OPENING_RELEASE_REQUIREMENT,
+  OPENING_RELEASE_VERSION,
+  type BoardSnapshot,
+  type ChangeRequest,
+  type RequestStatus,
+} from "@qoder-live-lab/contracts";
 import { REHEARSAL_FEATURES } from "@qoder-live-lab/contracts/features";
 import { GUARDRAIL_CHALLENGES } from "@qoder-live-lab/contracts/policy";
 import { RepoGuide } from "./repo-guide";
 
 const fallback: BoardSnapshot = {
   generatedAt: new Date().toISOString(),
-  system: { queuePaused: false, provider: "qca", activeRequestId: "QLL-018", runnerLastSeenAt: new Date().toISOString(), activeRelease: { version: "v0.4", requestId: "QLL-016", requirement: "Create the first Hong Kong market monitor", previewUrl: "/showcase", activatedAt: new Date().toISOString(), healthy: true } },
+  system: { queuePaused: false, provider: "qca", activeRequestId: "QLL-018", runnerLastSeenAt: new Date().toISOString(), activeRelease: { version: OPENING_RELEASE_VERSION, requestId: OPENING_RELEASE_REQUEST_ID, requirement: OPENING_RELEASE_REQUIREMENT, previewUrl: "/showcase", activatedAt: new Date().toISOString(), healthy: true } },
   requests: [
     fallbackCard("QLL-018", "Turn the stock list into a sector heatmap", "Mia", "coding"),
     fallbackCard("QLL-017", "Add five-minute momentum trails", "Noah", "testing"),
-    { ...fallbackCard("QLL-016", "Create the first Hong Kong market monitor", "Lena", "live"), releaseVersion: "v0.4", testSummary: "18 tests passed" },
+    { ...fallbackCard(OPENING_RELEASE_REQUEST_ID, OPENING_RELEASE_REQUIREMENT, "Qoder Live Lab", "live"), releaseVersion: OPENING_RELEASE_VERSION, testSummary: "Longbridge feed · policy · tests · build verified" },
     { ...fallbackCard("QLL-015", "Modify the admin control panel", "Guardrail demo", "blocked"), policy: { outcome: "block", layer: "changeset", ruleId: "SCOPE-001", publicReason: "The control plane is protected.", evidence: ["Protected path: apps/control/app/page.tsx", "0 files promoted"] } },
   ],
 };

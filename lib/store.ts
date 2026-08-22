@@ -1,4 +1,9 @@
 import { neon } from "@neondatabase/serverless";
+import {
+  OPENING_RELEASE_REQUEST_ID,
+  OPENING_RELEASE_REQUIREMENT,
+  OPENING_RELEASE_VERSION,
+} from "@qoder-live-lab/contracts";
 import type {
   BoardSnapshot,
   ChangeRequest,
@@ -16,11 +21,12 @@ type StoredRequest = ChangeRequest & { idempotencyKey: string };
 type MemoryStore = { requests: StoredRequest[]; system: SystemState; market: MarketSnapshot; initialized: boolean };
 
 const now = () => new Date().toISOString();
-const baselinePreviewUrl = process.env.BASELINE_PREVIEW_URL || "https://qoder-live-lab-canvas-8d0qaj3j9-qt-eam1.vercel.app";
+const baselinePreviewUrl = process.env.BASELINE_PREVIEW_URL || "https://qoder-live-lab-canvas-arlg3imwb-qt-eam1.vercel.app";
+const baselineCommitSha = process.env.BASELINE_COMMIT_SHA || "9aaacd682f562a43a63d2b2f734e9fc626a89a8f";
 const defaultRelease = {
-  version: "v0.4",
-  requestId: "QLL-016",
-  requirement: "Create the first Hong Kong market monitor",
+  version: OPENING_RELEASE_VERSION,
+  requestId: OPENING_RELEASE_REQUEST_ID,
+  requirement: OPENING_RELEASE_REQUIREMENT,
   previewUrl: baselinePreviewUrl,
   activatedAt: new Date(Date.now() - 1000 * 60 * 11).toISOString(),
   healthy: true,
@@ -60,7 +66,7 @@ const defaultMarketSnapshot: MarketSnapshot = {
 const seededRequests: StoredRequest[] = [
   makeSeed("QLL-018", "Turn the stock list into a sector heatmap", "Mia", "coding", 2),
   makeSeed("QLL-017", "Add five-minute momentum trails", "Noah", "testing", 5),
-  { ...makeSeed("QLL-016", "Create the first Hong Kong market monitor", "Lena", "live", 11), releaseVersion: "v0.4", testSummary: "18 tests passed", previewUrl: baselinePreviewUrl, files: ["apps/showcase/src/Showcase.tsx", "apps/showcase/src/showcase.css"] },
+  { ...makeSeed(OPENING_RELEASE_REQUEST_ID, OPENING_RELEASE_REQUIREMENT, "Qoder Live Lab", "live", 11), releaseVersion: OPENING_RELEASE_VERSION, testSummary: "Longbridge feed · policy · tests · build verified", previewUrl: baselinePreviewUrl, commitSha: baselineCommitSha, files: ["apps/showcase/src/Showcase.tsx", "apps/showcase/src/market-feed.ts", "apps/showcase/src/showcase.css"], policy: openingReleasePolicy() },
   {
     ...makeSeed("QLL-015", "Modify the admin control panel", "Guardrail demo", "blocked", 15),
     policy: { outcome: "block", layer: "changeset", ruleId: "SCOPE-001", publicReason: "The control plane is protected.", evidence: ["Protected path: apps/control/app/page.tsx", "0 files promoted"] },
@@ -311,25 +317,56 @@ export async function rollbackRelease() {
 
 export async function resetOpeningRelease() {
   const system = await readSystem();
-  const baseline = (await readRequests()).find((item) => item.releaseVersion === "v0.4" || item.id === "QLL-016");
-  if (!baseline) return system;
-  await updateRequest(baseline.id, { previewUrl: baselinePreviewUrl, releaseVersion: "v0.4" });
-  if (system.activeRelease.version === "v0.4" && system.activeRelease.previewUrl === baselinePreviewUrl) return system;
+  let baseline = (await readRequests()).find((item) => item.releaseVersion === OPENING_RELEASE_VERSION || item.id === OPENING_RELEASE_REQUEST_ID);
+  if (!baseline) {
+    const timestamp = now();
+    baseline = {
+      id: OPENING_RELEASE_REQUEST_ID,
+      idempotencyKey: `opening-${OPENING_RELEASE_VERSION}`,
+      title: OPENING_RELEASE_REQUIREMENT,
+      author: "Qoder Live Lab",
+      source: "ops",
+      status: "live",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      completedAt: timestamp,
+      releaseVersion: OPENING_RELEASE_VERSION,
+      previewUrl: baselinePreviewUrl,
+      commitSha: baselineCommitSha,
+      files: ["apps/showcase/src/Showcase.tsx", "apps/showcase/src/market-feed.ts", "apps/showcase/src/showcase.css"],
+      testSummary: "Longbridge feed · policy · tests · build verified",
+      policy: openingReleasePolicy(),
+      events: [makeEvent(OPENING_RELEASE_REQUEST_ID, "release", "Trusted Longbridge opening release activated")],
+    };
+    await writeRequest(baseline);
+  }
+  await updateRequest(baseline.id, { previewUrl: baselinePreviewUrl, releaseVersion: OPENING_RELEASE_VERSION, commitSha: baselineCommitSha });
+  if (system.activeRelease.version === OPENING_RELEASE_VERSION && system.activeRelease.previewUrl === baselinePreviewUrl) return system;
   const next: SystemState = {
     ...system,
     previousRelease: system.activeRelease,
     activeRelease: {
-      version: "v0.4",
+      version: OPENING_RELEASE_VERSION,
       requestId: baseline.id,
       requirement: baseline.title,
       previewUrl: baselinePreviewUrl,
-      commitSha: baseline.commitSha,
+      commitSha: baselineCommitSha,
       activatedAt: baseline.completedAt || baseline.updatedAt,
       healthy: true,
     },
   };
   await writeSystem(next);
   return next;
+}
+
+function openingReleasePolicy(): PolicyDecision {
+  return {
+    outcome: "allow",
+    layer: "deployment",
+    ruleId: "OWNER-BASELINE",
+    publicReason: "The opening release passed the trusted owner maintenance path.",
+    evidence: ["Longbridge market feed verified", "36 tests passed", "Immutable Vercel Preview healthy"],
+  };
 }
 
 function makeEvent(requestId: string, kind: RequestEvent["kind"], message: string): RequestEvent {
