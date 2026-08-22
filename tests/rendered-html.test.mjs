@@ -45,6 +45,11 @@ test("server-renders the Qoder Live Lab public board", async () => {
   assert.match(html, /href="\/qoder-favicon-v2\.png"/i);
   assert.doesNotMatch(html, /favicon\.svg/i);
   assert.match(html, /Ask for a change/);
+  assert.doesNotMatch(html, /01 \/ BUILD IN PUBLIC/);
+  assert.match(html, /One bounded Qoder Cloud Agent\./);
+  assert.match(html, /QODER VERIFIES/);
+  assert.match(html, /QODER DEPLOYS/);
+  assert.doesNotMatch(html, /POLICY VERIFIES/);
   assert.match(html, /What should the market become next/);
   assert.match(html, /Ask about this lab/i);
   assert.match(html, /qoder-brand-icon/);
