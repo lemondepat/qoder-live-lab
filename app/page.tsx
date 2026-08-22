@@ -144,7 +144,7 @@ export default function Home() {
       setRequest("");
       setNotice(created.status === "rejected"
         ? `Blocked by ${created.policy?.ruleId}. The live version was not changed.`
-        : "Request accepted. Follow it in the Live Pipeline.");
+        : "Request accepted. Follow it in the Pipeline.");
       setBoard((current) => ({ ...current, requests: [created, ...current.requests.filter((item) => item.id !== created.id)] }));
       window.setTimeout(() => selectPage("pipeline"), 450);
     } catch {
@@ -163,7 +163,7 @@ export default function Home() {
         </button>
         <nav className="public-pages-v2" aria-label="Public pages">
           <button type="button" className={activePage === "build" ? "active" : ""} aria-pressed={activePage === "build"} onClick={() => selectPage("build")}><span>01</span> Build</button>
-          <button type="button" className={activePage === "pipeline" ? "active" : ""} aria-pressed={activePage === "pipeline"} onClick={() => selectPage("pipeline")}><span>02</span> Live Pipeline</button>
+          <button type="button" className={activePage === "pipeline" ? "active" : ""} aria-pressed={activePage === "pipeline"} onClick={() => selectPage("pipeline")}><span>02</span> Pipeline</button>
         </nav>
         <div className="public-utilities-v2">
           <a href="/stage">Stage</a>
@@ -186,7 +186,7 @@ export default function Home() {
             <div><span>YOUR TURN</span><small>LIVE AUDIENCE REQUEST</small></div>
             <b>{board.system.queuePaused ? "PAUSED" : "OPEN"}</b>
           </header>
-          <h2>What should the market become next?</h2>
+          <h2>What should Qoder build into this dashboard next?</h2>
           <p>Describe a bold visual or interaction. Qoder may transform the whole canvas—but never the trusted data or control plane.</p>
           <label className="turn-name-v2">YOUR NICKNAME
             <input value={author} onChange={(event) => setAuthor(event.target.value)} maxLength={24} autoComplete="nickname" />
@@ -219,8 +219,8 @@ export default function Home() {
 
       </section>
 
-      <section className="pipeline-page-v2" id="pipeline" aria-label="Live Pipeline" hidden={activePage !== "pipeline"}>
-        <div className="pipeline-board-v2" aria-label="Live pipeline columns; swipe horizontally on mobile">
+      <section className="pipeline-page-v2" id="pipeline" aria-label="Pipeline" hidden={activePage !== "pipeline"}>
+        <div className="pipeline-board-v2" aria-label="Pipeline columns; swipe horizontally on mobile">
           {pipelineLanes.map((lane) => (
             <PipelineLane key={lane.key} lane={lane} cards={grouped[lane.key] ?? []} onSelect={setSelectedTicketId} />
           ))}

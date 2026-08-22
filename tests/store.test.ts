@@ -3,6 +3,16 @@ import test from "node:test";
 import { OPENING_RELEASE_VERSION } from "../packages/contracts/src/index";
 import { createBoundaryChallenge, createRequest, finishRequest, getBoard, getMarketSnapshot, resetOpeningRelease, setSystem, writeMarketSnapshot } from "../lib/store";
 
+// This suite is intentionally memory-only even when it is invoked directly from
+// an operator machine that has production credentials in its environment.
+delete process.env.DATABASE_URL;
+delete process.env.DATABASE_URL_UNPOOLED;
+process.env.SEED_DEMO_DATA = "false";
+
+test("store tests cannot connect to the production database", () => {
+  assert.equal(process.env.DATABASE_URL, undefined);
+});
+
 test("creates an allowed request in the queue idempotently", async () => {
   const input = { author: "Tester", title: "Add a soft aurora that responds to pointer movement", idempotencyKey: "test-idempotency-1" };
   const first = await createRequest(input);
