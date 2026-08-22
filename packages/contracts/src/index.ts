@@ -82,9 +82,9 @@ export type BoardSnapshot = {
   generatedAt: string;
 };
 
-export const OPENING_RELEASE_VERSION = "v0.7";
-export const OPENING_RELEASE_REQUEST_ID = "QLL-OPEN07";
-export const OPENING_RELEASE_REQUIREMENT = "Connect the intentionally simple canvas to trusted Longbridge market data";
+export const OPENING_RELEASE_VERSION = "v0.0";
+export const OPENING_RELEASE_REQUEST_ID = "QLL-BASELINE";
+export const OPENING_RELEASE_REQUIREMENT = "Show HSI and the current Hang Seng Index value";
 
 export type MarketFeedStatus = "live" | "delayed" | "stale" | "demo" | "offline";
 export type MarketSession = "pre-open" | "morning" | "lunch" | "afternoon" | "closing" | "closed";

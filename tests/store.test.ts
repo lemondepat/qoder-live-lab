@@ -48,7 +48,7 @@ test("resets the Stage to the immutable, intentionally simple opening release", 
   await resetOpeningRelease();
   const board = await getBoard();
   assert.equal(board.system.activeRelease.version, OPENING_RELEASE_VERSION);
-  assert.match(board.system.activeRelease.previewUrl, /qoder-live-lab-canvas-arlg3imwb/);
+  assert.match(board.system.activeRelease.previewUrl, /qoder-live-lab-canvas-jxs48qcdn/);
   assert.notEqual(board.system.previousRelease?.version, OPENING_RELEASE_VERSION);
 });
 
