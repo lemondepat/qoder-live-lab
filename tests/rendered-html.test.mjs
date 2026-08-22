@@ -41,6 +41,9 @@ test("server-renders the Qoder Live Lab public board", async () => {
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /<title>Qoder Live Lab<\/title>/i);
+  assert.match(html, /href="\/favicon\.ico"/i);
+  assert.match(html, /href="\/qoder-favicon-v2\.png"/i);
+  assert.doesNotMatch(html, /favicon\.svg/i);
   assert.match(html, /Ask for a change/);
   assert.match(html, /What should the market become next/);
   assert.match(html, /Ask about this lab/i);
