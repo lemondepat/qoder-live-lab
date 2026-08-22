@@ -117,11 +117,9 @@ export async function fetchWithRetry(input: string | URL, init: RequestInit = {}
   throw new Error(`${label} failed after ${attempts} attempts`);
 }
 
-export async function findPreview(candidate: Candidate, config: RunnerConfig, presetFeatureId?: string) {
+export async function findPreview(candidate: Candidate, config: RunnerConfig) {
   if (config.dryRun) {
-    const preview = new URL(config.showcaseUrl);
-    if (presetFeatureId) preview.searchParams.set("edition", presetFeatureId);
-    return preview.toString();
+    return new URL(config.showcaseUrl).toString();
   }
   if (!config.vercelToken || !config.vercelProjectId) throw new Error("Vercel Preview credentials are required in live mode");
   const deadline = Date.now() + 75_000;

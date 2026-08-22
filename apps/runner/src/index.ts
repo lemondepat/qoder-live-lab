@@ -2,7 +2,6 @@ import type { ChangeRequest } from "@qoder-live-lab/contracts";
 import { loadConfig } from "./config";
 import { ControlClient } from "./control-client";
 import { failurePolicy, type RunnerPhase } from "./failure-policy";
-import { materializeFeaturePack } from "./feature-pack";
 import { createPullRequest, createReleaseTag, findPreview, inspectAndVerify, mergePullRequest, waitForChecks } from "./git-pipeline";
 import { runLocal } from "./local-provider";
 import { startMarketFeed } from "./market-feed";
@@ -41,11 +40,7 @@ async function processRequest(request: ChangeRequest, provider: "qca" | "local")
   const branch = `qll/task-${request.id.toLowerCase()}`;
   let phase: RunnerPhase = "agent";
   try {
-    if (request.presetFeatureId) {
-      await control.event(request.id, "status", "Signed Feature Pack assigned to the trusted controller", { status: "coding", branch });
-      const activation = await materializeFeaturePack(request, branch, config);
-      await control.event(request.id, "agent", `Pre-verified pack materialized · ${activation.feature.title}`, { branch, commitSha: activation.commitSha });
-    } else if (provider === "qca") {
+    if (provider === "qca") {
       await control.event(request.id, "status", "Qoder Cloud agent assigned", { status: "coding", branch });
       if (config.dryRun) await simulateAgent(request.id);
       else {
@@ -81,7 +76,7 @@ async function processRequest(request: ChangeRequest, provider: "qca" | "local")
     guardDeadline(deadline);
     phase = "deployment";
     await control.event(request.id, "status", "Creating isolated preview", { status: "deploying" });
-    const previewUrl = await findPreview(candidate, config, request.presetFeatureId);
+    const previewUrl = await findPreview(candidate, config);
     guardDeadline(deadline);
     const merge = await mergePullRequest(pullRequest?.number, candidate, request.id, config);
     const released = await control.finish(request.id, "live", { branch, commitSha: candidate.commitSha, files: candidate.files, policy: candidate.policy, testSummary: candidate.testSummary, previewUrl, pullRequestUrl: pullRequest?.html_url });

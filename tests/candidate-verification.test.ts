@@ -60,6 +60,10 @@ test("QCA must fix candidate-owned verification failures before pushing", () => 
   assert.match(prompt, /fix the candidate, and rerun the full command until it passes/);
   assert.match(prompt, /Do not commit or push a candidate with failing tests, lint, or builds/);
   assert.match(prompt, /docs\/qca\/market-data-capabilities\.md in full/);
+  assert.match(prompt, /docs\/qca\/feature-library\.md in full/);
+  assert.match(prompt, /Privately evaluate the visitor requirement for a strong or partial semantic match/);
+  assert.match(prompt, /deliberately dormant and unreachable from Stage/);
+  assert.match(prompt, /There is no \?edition shortcut, preset activation, or controller bypass/);
   assert.match(prompt, /official one-minute Longbridge intraday bars/);
   assert.match(prompt, /never use Web Search/);
 });
