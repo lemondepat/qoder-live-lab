@@ -14,8 +14,10 @@ test("the public experience is a fixed-screen nav switcher", async () => {
   assert.match(page, /hidden=\{activePage !== "pipeline"\}/);
   assert.match(page, /selectPage\("pipeline"\)/);
   assert.doesNotMatch(page, /scrollIntoView/);
+  assert.doesNotMatch(page, /page-proof-v2/);
 
   assert.match(styles, /body:has\(\.public-v2\).*overflow:hidden/);
+  assert.doesNotMatch(styles, /page-proof-v2/);
   assert.match(styles, /\.public-v2 \[hidden\] \{ display:none!important; \}/);
   assert.match(styles, /\.build-page-v2 \{[\s\S]*?height:calc\(100dvh - 72px\);[\s\S]*?overflow:hidden;/);
   assert.match(styles, /\.pipeline-page-v2 \{ height:calc\(100dvh - 72px\);[\s\S]*?overflow:hidden;/);
