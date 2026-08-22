@@ -43,6 +43,9 @@ test("the public experience is a fixed-screen nav switcher", async () => {
   assert.match(styles, /\.pipeline-page-v2 \{ height:calc\(100dvh - 72px\);[\s\S]*?grid-template-rows:minmax\(0,1fr\);[\s\S]*?padding:0;[\s\S]*?overflow:hidden;/);
   assert.doesNotMatch(styles, /pipeline-heading-v2|pipeline-signal-v2|pipeline-meta-v2|mobile-board-hint-v2/);
   assert.match(styles, /\.pipeline-cards-v2 \{[\s\S]*?grid-auto-rows:max-content;[\s\S]*?overflow-y:auto;/);
+  assert.match(styles, /\.pipeline-cards-v2 \{[^}]*min-width:0;[^}]*max-width:100%;/);
+  assert.match(styles, /\.pipeline-card-v2 \{[^}]*width:auto;[^}]*min-width:0;[^}]*max-width:100%;[^}]*justify-self:stretch;[^}]*overflow:hidden;/);
+  assert.match(styles, /\.pipeline-card-title-v2 \{[^}]*overflow-wrap:anywhere;/);
   assert.match(styles, /\.pipeline-board-v2 \{[\s\S]*?grid-template-columns:repeat\(6,/);
   assert.match(styles, /\.pipeline-lane-v2\.lane-deploying>header i/);
   assert.match(styles, /\.ticket-modal-scroll-v2 \{[\s\S]*?overflow-y:auto;/);
