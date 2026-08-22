@@ -85,7 +85,7 @@ The provider opens the SSE stream before sending work, stores every Qoder event 
 - Deploy the root as the control project and `apps/showcase` as the canvas project on Vercel.
 - Set `NEXT_PUBLIC_SHOWCASE_URL` on the control project to the current immutable canvas release.
 - Set `VERCEL_TOKEN` and `VERCEL_SHOWCASE_PROJECT_ID` only on computer B, never in Qoder's environment.
-- Attach Neon Postgres to the control project and set `DATABASE_URL`. Without it, local development uses an in-memory seeded board.
+- Attach Neon Postgres to the control project and set `DATABASE_URL`. Without it, local development uses an empty in-memory board.
 
 The runner creates `qll/task-<id>`, enforces the diff policy, builds in an isolated worktree, opens a PR, waits for required checks and a Vercel Preview, then updates the active release and merges. Failures remove promotion eligibility and leave the previous version live.
 
